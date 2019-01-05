@@ -1,0 +1,43 @@
+FROM microsoft/dotnet:2.2-sdk AS build-env
+WORKDIR /app
+
+COPY *.csproj ./
+RUN dotnet restore
+
+COPY . ./
+RUN dotnet publish -c Release -o out
+
+FROM resin/raspberrypi3-debian AS base
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        libunwind8 \
+        icu-devtools \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install ffmpeg
+RUN curl -SL --output ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-armhf-static.tar.xz \
+    && ffmpeg_sha512='801fbce2750a4da4b5bc143c3fa69c89' \
+    && mkdir -p /usr/share/ffmpeg \
+    && tar -xf ffmpeg.tar.xz -C /usr/share/ffmpeg \
+    && rm ffmpeg.tar.xz \
+    && ln -s /usr/share/ffmpeg/ffmpeg /usr/bin/ffmpeg
+
+# Install .NET Core
+ENV DOTNET_VERSION 2.2.0
+
+RUN curl -SL --output dotnet.tar.gz https://dotnetcli.blob.core.windows.net/dotnet/Runtime/$DOTNET_VERSION/dotnet-runtime-$DOTNET_VERSION-linux-arm.tar.gz \
+    && dotnet_sha512='c1e52e053ac5797a2a0cd621a0df257e882849621f5c74604f1b51fc11a7e310a418226df6b36c79ab694a7a18b2d80fbb04236e0d3442f13a02007b9365b2b2' \
+    && echo "$dotnet_sha512 dotnet.tar.gz" | sha512sum -c - \
+    && mkdir -p /usr/share/dotnet \
+    && tar -zxf dotnet.tar.gz -C /usr/share/dotnet \
+    && rm dotnet.tar.gz \
+    && ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
+ 
+WORKDIR /app
+COPY --from=build-env /app/out ./
+
+#RUN useradd -ms /bin/bash moduleuser
+#USER moduleuser
+
+ENTRYPOINT ["dotnet", "CameraModule.dll"]
