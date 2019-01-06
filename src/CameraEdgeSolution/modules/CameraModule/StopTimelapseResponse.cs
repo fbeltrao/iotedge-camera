@@ -4,24 +4,15 @@ using Newtonsoft.Json;
 
 namespace CameraModule
 {
-    public class TakeTimelapseResponse
+    public class StopTimelapseResponse
     {
-        public TakeTimelapseResponse()
+        public StopTimelapseResponse()
         {          
         }
 
         [JsonProperty("id")]
         // Timelapse identifier
         public string Id { get; set; }
-        
-        
-        [JsonProperty("interval")]
-        // Interval in which pictures should be taken
-        public int Interval { get; set; }
-
-        [JsonProperty("duration")]
-        // How long the timelapse lasts
-        public int Duration { get; set; }
 
         [JsonProperty("errorMessage")]
         public string ErrorMessage { get;  set; }

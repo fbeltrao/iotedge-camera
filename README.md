@@ -1,6 +1,3 @@
-# iotedge-camera
-IoT Edge Module integrating with Raspberry PI camera
+# IoT Edge Camera module for Rapberry PI
 
-
-https://blogs.warwick.ac.uk/mikewillis/entry/quick_and_easy/
-https://www.johnvansickle.com/ffmpeg/faq/
+[add documentation here]

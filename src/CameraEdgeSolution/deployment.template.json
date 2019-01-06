@@ -88,7 +88,9 @@
     "camera": {
       "properties.desired": {
         "storageaccount": "$STORAGE_ACCOUNT",
-        "storagekey": "$STORAGE_KEY"
+        "storagekey": "$STORAGE_KEY",
+        "rotation": 180,
+        "photoresolution": "640x480"
       }
     }
   }

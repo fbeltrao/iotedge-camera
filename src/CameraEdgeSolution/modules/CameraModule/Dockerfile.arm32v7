@@ -13,15 +13,16 @@ RUN apt-get update \
         curl \
         libunwind8 \
         icu-devtools \
+        xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Install ffmpeg
-RUN curl -SL --output ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-armhf-static.tar.xz \
-    && ffmpeg_sha512='801fbce2750a4da4b5bc143c3fa69c89' \
-    && mkdir -p /usr/share/ffmpeg \
-    && tar -xf ffmpeg.tar.xz -C /usr/share/ffmpeg \
-    && rm ffmpeg.tar.xz \
-    && ln -s /usr/share/ffmpeg/ffmpeg /usr/bin/ffmpeg
+RUN curl -SL --output ffmpeg-release-armhf-static.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-armhf-static.tar.xz \
+    && curl -SL --output ffmpeg-release-armhf-static.tar.xz.md5 https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-armhf-static.tar.xz.md5 \
+    && echo '801fbce2750a4da4b5bc143c3fa69c89  ffmpeg-release-armhf-static.tar.xz' | md5sum -c \
+    && tar xvf ffmpeg-release-armhf-static.tar.xz \
+    && mv ffmpeg-4.1-armhf-32bit-static/ffmpeg ffmpeg-4.1-armhf-32bit-static/ffprobe /usr/local/bin/
+
 
 # Install .NET Core
 ENV DOTNET_VERSION 2.2.0

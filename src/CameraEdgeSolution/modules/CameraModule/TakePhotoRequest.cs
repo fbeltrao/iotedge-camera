@@ -7,6 +7,8 @@ namespace CameraModule
     public class TakePhotoRequest
     {
         string imageType = "jpeg";
+
+        [JsonProperty("imageType")]
         public string ImageType 
         { 
             get => imageType;
@@ -14,13 +16,19 @@ namespace CameraModule
         }
 
         string pixelFormat = "I420";
+
+        [JsonProperty("pixelFormat")]
         public string PixelFormat 
         { 
             get => pixelFormat;
             set => pixelFormat = string.IsNullOrEmpty(value) ? "I420" : value;
         }
 
+        [JsonProperty("deleteLocalFile")]
         public bool DeleteLocalFile { get; set; }
+
+        [JsonProperty("quickMode")]
+        public bool QuickMode { get; set; }
 
         public MMALEncoding GetImageEncoding()
         {

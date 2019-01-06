@@ -22,6 +22,5 @@
     <PackageReference Include="System.Runtime.Loader" Version="4.3.0"/>
     <PackageReference Include="MMALSharp" Version="0.4.4"/>
     <PackageReference Include="WindowsAzure.Storage" Version="9.3.3"/>
-    <PackageReference Include="MMALSharp.FFmpeg" Version="0.4.4"/>
   </ItemGroup>
 </Project>
