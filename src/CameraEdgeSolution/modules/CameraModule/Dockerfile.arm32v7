@@ -14,6 +14,7 @@ RUN apt-get update \
         libunwind8 \
         icu-devtools \
         xz-utils \
+        apt-transport-https \
     && rm -rf /var/lib/apt/lists/*
 
 # Install ffmpeg
@@ -24,15 +25,16 @@ RUN curl -SL --output ffmpeg-release-armhf-static.tar.xz https://johnvansickle.c
     && mv ffmpeg-4.1-armhf-32bit-static/ffmpeg ffmpeg-4.1-armhf-32bit-static/ffprobe /usr/local/bin/
 
 
-# Install .NET Core
-ENV DOTNET_VERSION 2.2.0
 
-RUN curl -SL --output dotnet.tar.gz https://dotnetcli.blob.core.windows.net/dotnet/Runtime/$DOTNET_VERSION/dotnet-runtime-$DOTNET_VERSION-linux-arm.tar.gz \
-    && dotnet_sha512='c1e52e053ac5797a2a0cd621a0df257e882849621f5c74604f1b51fc11a7e310a418226df6b36c79ab694a7a18b2d80fbb04236e0d3442f13a02007b9365b2b2' \
-    && echo "$dotnet_sha512 dotnet.tar.gz" | sha512sum -c - \
+# Install ASP.NET Core
+ENV ASPNETCORE_VERSION 2.2.0
+
+RUN curl -SL --output aspnetcore.tar.gz https://dotnetcli.blob.core.windows.net/dotnet/aspnetcore/Runtime/$ASPNETCORE_VERSION/aspnetcore-runtime-$ASPNETCORE_VERSION-linux-arm.tar.gz \
+    && aspnetcore_sha512='71fe46137c2b485af8f191412155a4c3c732cb71c37fd77471daaf517b612bf3ef6e9c2300c75da88ba04981fa9b965d8709f2e1bca731236c72bcde7e26cc7d' \
+    && echo "$aspnetcore_sha512  aspnetcore.tar.gz" | sha512sum -c - \
     && mkdir -p /usr/share/dotnet \
-    && tar -zxf dotnet.tar.gz -C /usr/share/dotnet \
-    && rm dotnet.tar.gz \
+    && tar -zxf aspnetcore.tar.gz -C /usr/share/dotnet \
+    && rm aspnetcore.tar.gz \
     && ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
  
 WORKDIR /app

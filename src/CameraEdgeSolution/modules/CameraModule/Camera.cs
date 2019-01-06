@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.Devices.Client;
 using Microsoft.Azure.Devices.Shared;
+using Microsoft.Extensions.Options;
 using Microsoft.WindowsAzure.Storage;
 using MMALSharp;
 using MMALSharp.Components;
@@ -17,11 +18,11 @@ using Newtonsoft.Json;
 
 namespace CameraModule
 {
-    public class Camera : IDisposable
+    public class Camera : ICamera, IDisposable
     {
         const string directory = "./cameraoutput";
 
-        private readonly CameraConfiguration configuration;
+        private readonly IOptions<CameraConfiguration> configuration;
 
         MMALCamera camera;
 
@@ -31,7 +32,7 @@ namespace CameraModule
         CancellationTokenSource timelapseCts;
 
 
-        public Camera(CameraConfiguration configuration)
+        public Camera(IOptions<CameraConfiguration> configuration)
         {
             this.configuration = configuration;
         }
@@ -260,19 +261,24 @@ namespace CameraModule
 
         async Task<string> UploadFileAsync(string folder, string localFilePath)
         {
-            if (CloudStorageAccount.TryParse($"DefaultEndpointsProtocol=https;AccountName={configuration.StorageAccount};AccountKey={configuration.StorageKey};EndpointSuffix=core.windows.net", out var cloudStorageAccount))
+            if (CloudStorageAccount.TryParse($"DefaultEndpointsProtocol=https;AccountName={configuration.Value.StorageAccount};AccountKey={configuration.Value.StorageKey};EndpointSuffix=core.windows.net", out var cloudStorageAccount))
             {
                 var blobClient = cloudStorageAccount.CreateCloudBlobClient();
-                var containerReference = blobClient.GetContainerReference(configuration.ModuleId);
+
+                var containerName = configuration.Value.ModuleId;
+                if (string.IsNullOrEmpty(containerName))
+                    containerName = "camera";
+                Logger.Log($"Using container {containerName}");
+                var containerReference = blobClient.GetContainerReference(containerName);
                 
                 if (await containerReference.CreateIfNotExistsAsync())
                 {
-                    Logger.Log($"Container {configuration.ModuleId} created");
+                    Logger.Log($"Container {containerName} created");
                 }
 
                 var filename = Path.GetFileName(localFilePath);
 
-                var blobName = $"{configuration.DeviceId}/{folder}/{filename}";
+                var blobName = $"{configuration.Value.DeviceId}/{folder}/{filename}";
                 var appendBlob = containerReference.GetAppendBlobReference(blobName);
 
                 await appendBlob.UploadFromFileAsync(localFilePath);

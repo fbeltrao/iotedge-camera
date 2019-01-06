@@ -12,45 +12,49 @@ namespace CameraModule
         public string StorageKey { get; set; }
         public string DeviceId { get; set; }
         public string ModuleId { get; set; }
+        public bool WebServerEnabled { get; set; }
 
-        public static CameraConfiguration CreateFromEnvironmentVariables()
+        internal void InitializeFromEnvironmentVariables()
         {
-            var result = new CameraConfiguration();
-
             var storageAccountEnv = Environment.GetEnvironmentVariable("storageaccount");
             if (!string.IsNullOrEmpty(storageAccountEnv))
             {
-                result.StorageAccount = storageAccountEnv;
-                Logger.Log($"Using storage account {result.StorageAccount}");
+                this.StorageAccount = storageAccountEnv;
+                Logger.Log($"Using storage account {this.StorageAccount}");
             }
 
             var storageKeyEnv = Environment.GetEnvironmentVariable("storagekey");
             if (!string.IsNullOrEmpty(storageKeyEnv))
             {
-                result.StorageKey = storageKeyEnv;
+                this.StorageKey = storageKeyEnv;
             }
 
-            result.DeviceId = Environment.GetEnvironmentVariable("IOTEDGE_DEVICEID");
-            if (string.IsNullOrEmpty(result.DeviceId))
+            this.DeviceId = Environment.GetEnvironmentVariable("IOTEDGE_DEVICEID");
+            if (string.IsNullOrEmpty(this.DeviceId))
             {
-                result.DeviceId = Environment.MachineName;
+                this.DeviceId = Environment.MachineName;
             }
 
-            result.ModuleId = Environment.GetEnvironmentVariable("IOTEDGE_MODULEID");
-            if (string.IsNullOrEmpty(result.ModuleId))
+            this.ModuleId = Environment.GetEnvironmentVariable("IOTEDGE_MODULEID");
+            if (string.IsNullOrEmpty(this.ModuleId))
             {
-                result.ModuleId = "camera";
+                this.ModuleId = "camera";
             }
+            Logger.Log($"Module: {this.ModuleId}");
 
             var outputEventsEnv = Environment.GetEnvironmentVariable("outputevents");
             if (bool.TryParse(outputEventsEnv, out var parsedOutputEventsEnv))
             {
-                result.OutputEvents = parsedOutputEventsEnv;
-                Logger.Log($"Outputting events: {result.OutputEvents}");
+                this.OutputEvents = parsedOutputEventsEnv;
+                Logger.Log($"Outputting events: {this.OutputEvents}");
             }
 
-
-            return result;
+            var webserverEnv = Environment.GetEnvironmentVariable("webserver");
+            if (bool.TryParse(webserverEnv, out var parsedWebServerEnv))
+            {
+                this.WebServerEnabled = parsedWebServerEnv;
+                Logger.Log($"Web server: {this.WebServerEnabled}");
+            }
         }
 
         internal void UpdateFromTwin(TwinCollection desired)
