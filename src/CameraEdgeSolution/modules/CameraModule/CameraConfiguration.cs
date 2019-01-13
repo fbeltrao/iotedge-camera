@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Azure.Devices.Client;
@@ -167,5 +168,35 @@ namespace CameraModule
 
         // Gets if a Azure storage information was provided
         internal bool HasStorageInformation() => !string.IsNullOrEmpty(this.StorageAccount) && !string.IsNullOrEmpty(this.StorageKey);
+    
+    
+          // Gets the output directory
+        internal string  GetOuputDirectory()
+        {
+            if (Directory.Exists("/cameraoutput"))
+                return "/cameraoutput";
+
+            return "./cameraoutput";
+        }
+
+        internal string EnsureOutputDirectoryExists()
+        {
+            var directory = GetOuputDirectory();
+            try
+            {
+                if (!Directory.Exists(directory))
+                {
+                    return Directory.CreateDirectory(directory).FullName;
+                }
+                else
+                {
+                    return Path.GetFullPath(directory);
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Failed to create '{directory}' folder", ex);
+            }
+        }
     }
 }

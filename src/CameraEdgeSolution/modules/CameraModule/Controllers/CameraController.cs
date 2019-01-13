@@ -15,12 +15,14 @@ namespace CameraModule.Controllers
     public class CameraController : ControllerBase
     {
         private readonly ILogger logger;
+        private readonly CameraConfiguration configuration;
         private readonly IHubContext<CameraHub> cameraHub;
         private readonly ICamera camera;
 
-        public CameraController(ILogger<CameraController> logger, IHubContext<CameraHub> cameraHub, ICamera camera)
+        public CameraController(ILogger<CameraController> logger, CameraConfiguration configuration, IHubContext<CameraHub> cameraHub, ICamera camera)
         {
             this.logger = logger;
+            this.configuration = configuration;
             this.cameraHub = cameraHub;
             this.camera = camera;
         }
@@ -50,17 +52,29 @@ namespace CameraModule.Controllers
             var safeHeight = height ?? 0;
             if (safeHeight > 0 && safeWidth > 0)
             {
-               using (var actualImage = Image.Load(await this.camera.GetImageStreamAsync(image)))
-                {
-                    actualImage.Mutate(x => x
-                        .Resize(safeWidth, safeHeight)
-                        );
+                var thumbnailImageFileName = string.Concat(
+                    Path.GetFileNameWithoutExtension(image),
+                    $"-{safeWidth}x{safeHeight}",
+                    Path.GetExtension(image));
 
-                    var memStream = new MemoryStream();
-                    actualImage.SaveAsJpeg(memStream);
-                    memStream.Seek(0, SeekOrigin.Begin);
-                    return File(memStream, "image/jpeg", image);
+                var thumbnailDirectory = Path.Combine(this.configuration.GetOuputDirectory(), "thumbnails/");
+                if (!Directory.Exists(thumbnailDirectory))
+                {
+                    try
+                    {
+                        Directory.CreateDirectory(thumbnailDirectory);
+                    }
+                    catch
+                    {
+                        // might be created in parallel
+                    }
                 }
+                var thumbnailFilePath = Path.Combine(thumbnailDirectory, thumbnailImageFileName);
+
+                await Utils.EnsureThumbnailExists(thumbnailFilePath, safeWidth, safeHeight, () => this.camera.GetImageStreamAsync(image));
+               
+                return new PhysicalFileResult(Path.GetFullPath(thumbnailFilePath), "image/jpeg");
+                
             }
             
             return new FileStreamResult(await this.camera.GetImageStreamAsync(image), "image/jpeg");

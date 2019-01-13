@@ -38,15 +38,6 @@ namespace CameraModule
             this.configuration.Subscribe(this.ApplyConfiguration);
         }
 
-        // Gets the output directory
-        string  GetOuputDirectory()
-        {
-            if (Directory.Exists("/cameraoutput"))
-                return "/cameraoutput";
-
-            return "./cameraoutput";
-        }
-
         void ApplyConfiguration()
         {
             MMALCameraConfig.Rotation = this.configuration.CameraRotation;
@@ -102,7 +93,7 @@ namespace CameraModule
 
             try
             {
-                var path = EnsureLocalDirectoryExists();
+                var path = configuration.EnsureOutputDirectoryExists();
                 currentTimelapseId = Guid.NewGuid().ToString();
                 var pathForImages = Path.Combine(path, currentTimelapseId);
                 
@@ -209,26 +200,6 @@ namespace CameraModule
             return new StopTimelapseResponse();
         }
 
-        string EnsureLocalDirectoryExists()
-        {
-            var directory = GetOuputDirectory();
-            try
-            {
-                if (!Directory.Exists(directory))
-                {
-                    return Directory.CreateDirectory(directory).FullName;
-                }
-                else
-                {
-                    return Path.GetFullPath(directory);
-                }
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Failed to create '{directory}' folder", ex);
-            }
-        }
-
         public async Task<TakePhotoResponse> TakePhotoAsync(TakePhotoRequest takePhotoRequest)
         {
             var cameraWasUsed = false;
@@ -244,7 +215,7 @@ namespace CameraModule
 
             try
             {
-                var path = EnsureLocalDirectoryExists();
+                var path = configuration.EnsureOutputDirectoryExists();
 
                 await cameraInUse.WaitAsync();
                 cameraWasUsed = true;
@@ -381,7 +352,7 @@ namespace CameraModule
         public Task<IReadOnlyList<string>> GetImagesAsync()
         {
             var fileList = new List<string>();
-            foreach (var file in Directory.GetFiles(GetOuputDirectory()))
+            foreach (var file in Directory.GetFiles(configuration.GetOuputDirectory()))
                 fileList.Add(Path.GetFileName(file));
 
             // sort descending
@@ -392,7 +363,7 @@ namespace CameraModule
 
         public Task<Stream> GetImageStreamAsync(string image)
         {
-            return Task.FromResult<Stream>(File.OpenRead(Path.Combine(GetOuputDirectory(), image)));
+            return Task.FromResult<Stream>(File.OpenRead(Path.Combine(configuration.GetOuputDirectory(), image)));
         }
 
         #endregion
