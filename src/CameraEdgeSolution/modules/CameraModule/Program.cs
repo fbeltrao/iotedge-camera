@@ -28,9 +28,6 @@ namespace CameraModule
                 })
                 .ConfigureServices((hostContext, services) =>
                 {
-                    // services.Configure<CameraConfiguration>("camera", (options) => {
-                    //     options.InitializeFromEnvironmentVariables();
-                    // });
                     services.AddSingleton<CameraConfiguration>(CameraConfiguration.CreateFromEnvironmentVariables());
 
                     services.AddSingleton<ICamera, PiCamera>();

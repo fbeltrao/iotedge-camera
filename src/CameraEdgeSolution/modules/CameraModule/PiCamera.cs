@@ -32,7 +32,6 @@ namespace CameraModule
         string currentTimelapseId = null;
         CancellationTokenSource timelapseCts;
 
-
         public PiCamera(CameraConfiguration configuration)
         {
             this.configuration = configuration;
@@ -118,7 +117,7 @@ namespace CameraModule
                 Logger.Log($"Starting timelapse {currentTimelapseId}");
                 _ = camera.TakePictureTimelapse(imgCaptureHandler, MMALEncoding.JPEG, MMALEncoding.I420, tl)
                     .ContinueWith(async (t) => await PrepareTimelapseVideoAsync(t, imgCaptureHandler, pathForImages));
- 
+
                 return new TakeTimelapseResponse()
                 {
                     Id = currentTimelapseId,
@@ -172,8 +171,11 @@ namespace CameraModule
                     process.WaitForExit();
 
                     Logger.Log($"Timelapse video for {currentTimelapseId} created");
+                    if (configuration.HasStorageInformation())
+                    {
+                        await UploadFileAsync("timelapse", targetFilePath);
+                    }
 
-                    await UploadFileAsync("timelapse", targetFilePath);
                 }
             }
             catch (Exception ex)
@@ -203,6 +205,7 @@ namespace CameraModule
 
             this.timelapseCts.Cancel();
             Logger.Log($"Timelapse {currentTimelapseId ?? string.Empty} stopped");
+
             return new StopTimelapseResponse();
         }
 
@@ -261,7 +264,10 @@ namespace CameraModule
                     // rename it according to our rules
                     localFilePath = FixFilename(localFilePath);
 
-                    var blobName = await UploadFileAsync("photos", localFilePath);
+                    if (configuration.HasStorageInformation())
+                    {
+                        await UploadFileAsync("photos", localFilePath);
+                    }
 
                     var fi = new FileInfo(localFilePath);
                     Logger.Log($"New photo: {fi.Length} bytes, in {stopwatch.ElapsedMilliseconds}ms");
@@ -273,8 +279,7 @@ namespace CameraModule
 
                     return new TakePhotoResponse()
                     {
-                        BlobName = blobName,
-                        LocalFilePath = Path.GetFileName(localFilePath),
+                        Filename = Path.GetFileName(localFilePath),
                         DeleteLocalFile = takePhotoRequest.DeleteLocalFile,
                         PixelFormat = takePhotoRequest.PixelFormat,
                         ImageType = takePhotoRequest.ImageType,
@@ -379,6 +384,9 @@ namespace CameraModule
             foreach (var file in Directory.GetFiles(GetOuputDirectory()))
                 fileList.Add(Path.GetFileName(file));
 
+            // sort descending
+            fileList.Sort((t1, t2) => t2.CompareTo(t1));
+
             return Task.FromResult<IReadOnlyList<string>>(fileList);
         }
 
@@ -386,6 +394,7 @@ namespace CameraModule
         {
             return Task.FromResult<Stream>(File.OpenRead(Path.Combine(GetOuputDirectory(), image)));
         }
+
         #endregion
     }
 }

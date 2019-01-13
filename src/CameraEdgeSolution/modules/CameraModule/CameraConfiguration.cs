@@ -78,7 +78,7 @@ namespace CameraModule
             }
         }
 
-        // Connect the configuration to a IoT Edge module
+        // Connects the configuration to an IoT Edge module twin
         internal async Task ConnectToModuleAsync(ModuleClient moduleClient)
         {
             var twin = await moduleClient.GetTwinAsync();
@@ -117,8 +117,6 @@ namespace CameraModule
                     if (cameraRotationValidValues.Contains(rotation))
                     {
                         this.CameraRotation = rotation;
-                        // MMALCameraConfig.Rotation = rotation;
-                        // Logger.Log($"Camera rotation: {rotation}");
                     }
                 }
                 else
@@ -138,8 +136,6 @@ namespace CameraModule
                     {
                         if (int.TryParse(wh[1], out var height))
                         {
-                            //MMALCameraConfig.StillResolution = new Resolution(width, height);
-                            //Logger.Log($"Camera photo resolution: {photoResolutionValue}");
                             this.CameraPhotoResolutionHeight = height;
                             this.CameraPhotoResolutionWidth = width;
                             resolutionSet = true;
@@ -168,5 +164,8 @@ namespace CameraModule
 
             return Task.FromResult(0);
         }
+
+        // Gets if a Azure storage information was provided
+        internal bool HasStorageInformation() => !string.IsNullOrEmpty(this.StorageAccount) && !string.IsNullOrEmpty(this.StorageKey);
     }
 }

@@ -4,8 +4,8 @@ namespace CameraModule
 {
     public class TakePhotoResponse
     {
-        [JsonProperty("localFilePath")]
-        public string LocalFilePath { get; set; }
+        [JsonProperty("filename")]
+        public string Filename { get; set; }
 
         [JsonProperty("blobName")]
         public string BlobName { get; set; }
