@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.Azure.Devices.Client;
 using Microsoft.Azure.Devices.Shared;
 using MMALSharp;
 
@@ -13,6 +16,24 @@ namespace CameraModule
         public string DeviceId { get; set; }
         public string ModuleId { get; set; }
         public bool WebServerEnabled { get; set; }
+
+        // Get/sets the camera rotation
+        public int CameraRotation { get; set; }
+
+        public int? CameraPhotoResolutionWidth { get; set; }
+        public int? CameraPhotoResolutionHeight { get; set; }
+
+        HashSet<Action> subscribers = new HashSet<Action>();
+
+        // Subscribe to changes in the configuration
+        public void Subscribe(Action action) => subscribers.Add(action);
+
+        public static CameraConfiguration CreateFromEnvironmentVariables()
+        {
+            var configuration = new CameraConfiguration();
+            configuration.InitializeFromEnvironmentVariables();
+            return configuration;
+        }
 
         internal void InitializeFromEnvironmentVariables()
         {
@@ -57,8 +78,22 @@ namespace CameraModule
             }
         }
 
-        internal void UpdateFromTwin(TwinCollection desired)
+        // Connect the configuration to a IoT Edge module
+        internal async Task ConnectToModuleAsync(ModuleClient moduleClient)
         {
+            var twin = await moduleClient.GetTwinAsync();
+            await UpdateFromTwin(twin.Properties?.Desired, moduleClient);
+
+            await moduleClient.SetDesiredPropertyUpdateCallbackAsync(UpdateFromTwin, moduleClient);
+
+            Logger.Log("Twin changes callback is set");
+        }
+
+        internal Task UpdateFromTwin(TwinCollection desired, object userContext)
+        {
+            if (desired == null)
+                return Task.FromResult(0);
+
             if (desired.Contains("storageaccount"))
             {
                 this.StorageAccount = desired["storageaccount"];
@@ -81,8 +116,9 @@ namespace CameraModule
                 {
                     if (cameraRotationValidValues.Contains(rotation))
                     {
-                        MMALCameraConfig.Rotation = rotation;
-                        Logger.Log($"Camera rotation: {rotation}");
+                        this.CameraRotation = rotation;
+                        // MMALCameraConfig.Rotation = rotation;
+                        // Logger.Log($"Camera rotation: {rotation}");
                     }
                 }
                 else
@@ -102,8 +138,10 @@ namespace CameraModule
                     {
                         if (int.TryParse(wh[1], out var height))
                         {
-                            MMALCameraConfig.StillResolution = new Resolution(width, height);
-                            Logger.Log($"Camera photo resolution: {photoResolutionValue}");
+                            //MMALCameraConfig.StillResolution = new Resolution(width, height);
+                            //Logger.Log($"Camera photo resolution: {photoResolutionValue}");
+                            this.CameraPhotoResolutionHeight = height;
+                            this.CameraPhotoResolutionWidth = width;
                             resolutionSet = true;
                         }
                     }
@@ -114,6 +152,21 @@ namespace CameraModule
                     Logger.Log($"Invalid photo resolution: {photoResolutionValue}. Should be WidthxHeight (i.e. 640x480)");
                 }
             }
+
+            foreach (var subscriber in this.subscribers)
+            {
+                try
+                {
+                    subscriber();
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Failed to updated configuration changes subscriber");
+                }
+                
+            }
+
+            return Task.FromResult(0);
         }
     }
 }

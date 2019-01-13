@@ -65,9 +65,35 @@
             "settings": {
               "image": "${MODULES.CameraModule}",
               "createOptions": {
+                "ExposedPorts": {
+                  "80/tcp": {}
+                },
+                "Mounts": {
+                  "Type": "bind",
+                  "Source": "/home/pi/cameraoutput",
+                  "Destination": "/cameraoutput",
+                  "Mode": "",
+                  "RW": true,
+                  "Propagation": "rprivate"
+                },
                 "HostConfig": {
-                  "Privileged": true
-                }
+                  "Privileged": true,
+                  "PortBindings": {
+                    "80/tcp": [
+                      {
+                        "HostPort": "5003"
+                      }
+                    ]
+                  },
+                  "Binds": [
+                    "/home/pi/cameraoutput:/cameraoutput"
+                  ]
+                }                
+              }
+            },
+            "env": {
+              "webserver": {
+                "value": "1"
               }
             }
           }
@@ -89,8 +115,7 @@
       "properties.desired": {
         "storageaccount": "$STORAGE_ACCOUNT",
         "storagekey": "$STORAGE_KEY",
-        "rotation": 180,
-        "photoresolution": "640x480"
+        "rotation": 0
       }
     }
   }

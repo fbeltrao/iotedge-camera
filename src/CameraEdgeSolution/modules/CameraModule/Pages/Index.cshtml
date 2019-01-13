@@ -4,7 +4,77 @@
     ViewData["Title"] = "Home page";
 }
 
+
 <div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://docs.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+    <div id="app">
+        <div class="row">
+            <div class="col-xs-6">
+                <button class="btn btn-lg btn-primary" :disabled="isWorking" v-on:click="newPhoto">Take Photo</button>
+            </div>
+            <div class="col-xs-6">
+                {{ message }}
+            </div>
+        </div>
+        <div class="row selected-image">
+            <div class="col-xs-12">
+                <img class="selected-image" v-bind:src="imageSrc" /> 
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-xs-12">
+                <ul class="list-inline" id="album">
+                    <li class="list-inline-item" v-for="item in photos" v-on:click="selectPhoto(item)">
+                        <img class="img-thumbnail" v-bind:src="item" />
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
 </div>
+
+
+@section Scripts {
+<script type="text/javascript">
+var app = new Vue({
+        el: '#app',
+        data: {
+            message: '',
+            photos: [],
+            imageSrc: '',
+            apiURL: '',
+            isWorking: false
+        }, methods: {
+            newPhoto: function() {
+                this.message = 'Taking new photo...';
+                this.isWorking = true;
+                axios
+                    .post(this.apiURL + '/api/camera/photos')
+                    .then(response => {
+                        this.message = '';
+                        if (response.data.localFilePath) {
+                            var newImageSrc = this.apiURL + '/api/camera/photos/' + encodeURI(response.data.localFilePath);
+                            this.photos.unshift(newImageSrc);
+                            this.imageSrc = newImageSrc;
+                        }
+
+                        this.isWorking = false;
+                    });                
+            },
+            selectPhoto: function(photo) {
+                this.imageSrc = photo;
+            }
+        },
+        mounted() {
+            this.apiURL = window.location.protocol + "//" + window.location.hostname + ":" + window.location.port;
+            axios
+                .get(this.apiURL + '/api/camera/photos')
+                .then(response => {
+                    for (var i=0; i < response.data.length; ++i)
+                        this.photos.push(this.apiURL + '/api/camera/photos/' + encodeURI(response.data[i]));
+                });   
+        }
+    });
+</script>
+
+}

@@ -37,7 +37,7 @@
       "console": "internalConsole",
       "env": {
         "EdgeHubConnectionString": "${config:azure-iot-edge.EdgeHubConnectionString}",
-        "webserver": "0"
+        "webserver": "1"
         
       }
     }

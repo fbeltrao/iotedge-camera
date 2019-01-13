@@ -16,10 +16,10 @@ namespace CameraModule
     {
         private readonly ILogger logger;
         private readonly ICamera camera;
-        private readonly IOptions<CameraConfiguration> configuration;
+        private readonly CameraConfiguration configuration;
         private ModuleClient moduleClient;
 
-        public IoTHubModuleConnector(ILogger<IoTHubModuleConnector> logger, ICamera camera, IOptions<CameraConfiguration> configuration)
+        public IoTHubModuleConnector(ILogger<IoTHubModuleConnector> logger, ICamera camera, CameraConfiguration configuration)
         {
             this.logger = logger;
             this.camera = camera;
@@ -41,30 +41,13 @@ namespace CameraModule
             await moduleClient.OpenAsync();
             Logger.Log("Initializing Pi camera module");
 
-            var twin = await moduleClient.GetTwinAsync();
-            HandleTwinChanges(twin.Properties.Desired);
+            await this.configuration.ConnectToModuleAsync(moduleClient);
 
             await moduleClient.SetMethodDefaultHandlerAsync(ModuleMethodHandlerAsync, moduleClient);
             Logger.Log("Default method handler initialized");
-
-            await moduleClient.SetDesiredPropertyUpdateCallbackAsync((updatedTwin, _) => {
-                HandleTwinChanges(updatedTwin);
-                return Task.FromResult(0);
-            }, null);
-
-            Logger.Log("Twin changes callback is set");
         }
 
         public Task StopAsync(CancellationToken cancellationToken) => Task.FromResult(0);
-
-        private void HandleTwinChanges(TwinCollection desired)
-        {
-            if (desired == null)
-                return;
-
-            configuration.Value.UpdateFromTwin(desired);
-
-        }
 
         // Helper that converts an object to json and returns the byte[] with string value
         byte[] GetJsonBytes(object value) => Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(value));
@@ -148,7 +131,7 @@ namespace CameraModule
                 var response = await camera.TakePhotoAsync(req);
                 
                 var responseAsBytes = GetJsonBytes(response);
-                if (configuration.Value.OutputEvents)
+                if (configuration.OutputEvents)
                 {
                     await SendEventAsync(moduleClient, responseAsBytes);
                 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -18,11 +19,11 @@ using Newtonsoft.Json;
 
 namespace CameraModule
 {
-    public class Camera : ICamera, IDisposable
-    {
-        const string directory = "./cameraoutput";
+    public class PiCamera : ICamera, IDisposable
+    {      
+        const string TimestampFormat = "yyyy-MM-dd HH-mm-ss";
 
-        private readonly IOptions<CameraConfiguration> configuration;
+        private readonly CameraConfiguration configuration;
 
         MMALCamera camera;
 
@@ -32,9 +33,34 @@ namespace CameraModule
         CancellationTokenSource timelapseCts;
 
 
-        public Camera(IOptions<CameraConfiguration> configuration)
+        public PiCamera(CameraConfiguration configuration)
         {
             this.configuration = configuration;
+            this.configuration.Subscribe(this.ApplyConfiguration);
+        }
+
+        // Gets the output directory
+        string  GetOuputDirectory()
+        {
+            if (Directory.Exists("/cameraoutput"))
+                return "/cameraoutput";
+
+            return "./cameraoutput";
+        }
+
+        void ApplyConfiguration()
+        {
+            MMALCameraConfig.Rotation = this.configuration.CameraRotation;
+            Logger.Log($"Camera rotation: {this.configuration.CameraRotation}");
+
+            if (this.configuration.CameraPhotoResolutionWidth.HasValue &&
+                this.configuration.CameraPhotoResolutionHeight.HasValue &&
+                this.configuration.CameraPhotoResolutionHeight.Value > 0 &&
+                this.configuration.CameraPhotoResolutionWidth.Value > 0)
+            {
+                MMALCameraConfig.StillResolution = new Resolution(this.configuration.CameraPhotoResolutionWidth.Value, this.configuration.CameraPhotoResolutionHeight.Value);
+                Logger.Log($"Camera photo resolution: {this.configuration.CameraPhotoResolutionWidth.Value}x{this.configuration.CameraPhotoResolutionHeight.Value}");
+            }
         }
 
         public bool Initialize()
@@ -42,6 +68,8 @@ namespace CameraModule
             try
             {
                 camera = MMALCamera.Instance;
+
+                ApplyConfiguration();
             }
             catch (Exception ex)
             {
@@ -180,6 +208,7 @@ namespace CameraModule
 
         string EnsureLocalDirectoryExists()
         {
+            var directory = GetOuputDirectory();
             try
             {
                 if (!Directory.Exists(directory))
@@ -193,7 +222,7 @@ namespace CameraModule
             }
             catch (Exception ex)
             {
-                throw new Exception("Failed to create '/cameraOutput' folder", ex);
+                throw new Exception($"Failed to create '{directory}' folder", ex);
             }
         }
 
@@ -228,6 +257,10 @@ namespace CameraModule
                     stopwatch.Stop();
                     
                     var localFilePath = imgCaptureHandler.GetFilepath();
+
+                    // rename it according to our rules
+                    localFilePath = FixFilename(localFilePath);
+
                     var blobName = await UploadFileAsync("photos", localFilePath);
 
                     var fi = new FileInfo(localFilePath);
@@ -241,7 +274,7 @@ namespace CameraModule
                     return new TakePhotoResponse()
                     {
                         BlobName = blobName,
-                        LocalFilePath = localFilePath,
+                        LocalFilePath = Path.GetFileName(localFilePath),
                         DeleteLocalFile = takePhotoRequest.DeleteLocalFile,
                         PixelFormat = takePhotoRequest.PixelFormat,
                         ImageType = takePhotoRequest.ImageType,
@@ -257,15 +290,37 @@ namespace CameraModule
             }
         }
 
+        private string FixFilename(string localFilePath)
+        {
+            var directory = Path.GetDirectoryName(localFilePath);
+            var extension = Path.GetExtension(localFilePath);
+            var now = DateTime.UtcNow.ToString(TimestampFormat);
+            for (var i=0; i < 5; i++)
+            {
+                try
+                {
+                    var newFileName = (i == 0) ? now : string.Concat(now, "_" + i.ToString());
+                    var newFilePath = Path.Combine(directory, string.Concat(newFileName, extension));
+                    File.Move(localFilePath, newFilePath);
+                    return newFilePath;
+                }
+                catch (IOException)
+                {
 
+                }
+            }
+
+            // if we couldn't fix the name, return the original
+            return localFilePath;
+        }
 
         async Task<string> UploadFileAsync(string folder, string localFilePath)
         {
-            if (CloudStorageAccount.TryParse($"DefaultEndpointsProtocol=https;AccountName={configuration.Value.StorageAccount};AccountKey={configuration.Value.StorageKey};EndpointSuffix=core.windows.net", out var cloudStorageAccount))
+            if (CloudStorageAccount.TryParse($"DefaultEndpointsProtocol=https;AccountName={configuration.StorageAccount};AccountKey={configuration.StorageKey};EndpointSuffix=core.windows.net", out var cloudStorageAccount))
             {
                 var blobClient = cloudStorageAccount.CreateCloudBlobClient();
 
-                var containerName = configuration.Value.ModuleId;
+                var containerName = configuration.ModuleId;
                 if (string.IsNullOrEmpty(containerName))
                     containerName = "camera";
                 Logger.Log($"Using container {containerName}");
@@ -278,7 +333,7 @@ namespace CameraModule
 
                 var filename = Path.GetFileName(localFilePath);
 
-                var blobName = $"{configuration.Value.DeviceId}/{folder}/{filename}";
+                var blobName = $"{configuration.DeviceId}/{folder}/{filename}";
                 var appendBlob = containerReference.GetAppendBlobReference(blobName);
 
                 await appendBlob.UploadFromFileAsync(localFilePath);
@@ -316,6 +371,20 @@ namespace CameraModule
             Dispose(true);
             
             GC.SuppressFinalize(this);
+        }
+
+        public Task<IReadOnlyList<string>> GetImagesAsync()
+        {
+            var fileList = new List<string>();
+            foreach (var file in Directory.GetFiles(GetOuputDirectory()))
+                fileList.Add(Path.GetFileName(file));
+
+            return Task.FromResult<IReadOnlyList<string>>(fileList);
+        }
+
+        public Task<Stream> GetImageStreamAsync(string image)
+        {
+            return Task.FromResult<Stream>(File.OpenRead(Path.Combine(GetOuputDirectory(), image)));
         }
         #endregion
     }
