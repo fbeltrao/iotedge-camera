@@ -1,3 +1,4 @@
 # IoT Edge Camera module for Rapberry PI
 
-[add documentation here]
+This repository contains a sample IoT Edge module allowing you to control a Raspberry camera remotely.
+ 

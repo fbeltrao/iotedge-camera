@@ -7,6 +7,7 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using MediatR;
 using Microsoft.Azure.Devices.Client;
 using Microsoft.Azure.Devices.Shared;
 using Microsoft.Extensions.Options;
@@ -17,24 +18,26 @@ using MMALSharp.Handlers;
 using MMALSharp.Native;
 using Newtonsoft.Json;
 
-namespace CameraModule
+namespace CameraModule.Models
 {
     public class PiCamera : ICamera, IDisposable
     {      
-        const string TimestampFormat = "yyyy-MM-dd HH-mm-ss";
+        const string TimestampFormat = "yyyy-MM-dd-HH-mm-ss";
 
         private readonly CameraConfiguration configuration;
-
+        private readonly IMediator mediator;
         MMALCamera camera;
 
         SemaphoreSlim cameraInUse = new SemaphoreSlim(1);
 
         string currentTimelapseId = null;
+        private string currentTimelapseOutputDirectory;
         CancellationTokenSource timelapseCts;
 
-        public PiCamera(CameraConfiguration configuration)
+        public PiCamera(CameraConfiguration configuration, IMediator mediator)
         {
             this.configuration = configuration;
+            this.mediator = mediator;
             this.configuration.Subscribe(this.ApplyConfiguration);
         }
 
@@ -86,6 +89,7 @@ namespace CameraModule
                 return new TakeTimelapseResponse()
                 {
                     ErrorMessage = $"Timelapse {currentTimelapseId?.ToString()} is being taken",
+                    IsTakingTimelapse = true,
                 };
             }
 
@@ -93,9 +97,9 @@ namespace CameraModule
 
             try
             {
-                var path = configuration.EnsureOutputDirectoryExists();
-                currentTimelapseId = Guid.NewGuid().ToString();
-                var pathForImages = Path.Combine(path, currentTimelapseId);
+                currentTimelapseId = DateTime.UtcNow.ToString(TimestampFormat);
+                currentTimelapseOutputDirectory = req.OutputDirectory; 
+                var pathForImages = Path.Combine(req.OutputDirectory, currentTimelapseId);
                 
                 await cameraInUse.WaitAsync();
                 cameraUsed = true;
@@ -121,15 +125,15 @@ namespace CameraModule
                 if (cameraUsed)
                     cameraInUse.Release();
 
-                    throw;
-              }
+                throw;
+            }
         }
 
         async Task PrepareTimelapseVideoAsync(Task captureImageTask, ImageStreamCaptureHandler imgCaptureHandler, string path)
         {
             try
             {
-                Logger.Log($"Prepare timelapse: {captureImageTask.IsCompletedSuccessfully}, {captureImageTask.IsFaulted}");
+                //Logger.Log($"Prepare timelapse: {captureImageTask.IsCompletedSuccessfully}, {captureImageTask.IsFaulted}");
 
                 if (captureImageTask.IsCompletedSuccessfully)
                 {
@@ -150,12 +154,13 @@ namespace CameraModule
 
                     var extension = imgCaptureHandler.ProcessedFiles.First().Extension;
 
-                    var targetDirectory = Path.Combine(path, "out");
-                    var targetFilePath = Path.Combine(targetDirectory, string.Concat(currentTimelapseId, ".avi"));
+                    var targetDirectory = configuration.EnsureOutputDirectoryExists(this.currentTimelapseOutputDirectory);
+                    var targetFilePath = Path.Combine(targetDirectory, string.Concat(currentTimelapseId, ".mp4"));
                     var targetDirectoryInfo = Directory.CreateDirectory(targetDirectory);
 
                     var fps = 2;
-                    var args = $"-framerate {fps} -f image2 -pattern_type glob -y -i {path + "/*." + extension} {targetFilePath}";
+                    //var args = $"-framerate {fps} -f image2 -pattern_type glob -y -i {path + "/*." + extension} {targetFilePath}";
+                    var args = $"-framerate {fps} -f image2 -pattern_type glob -y -i {path + "/*." + extension} -c:v libx264 -pix_fmt yuv420p {targetFilePath}";
                     Logger.Log($"Starting ffmpeg with args: {args}");
                     process.StartInfo.Arguments = args;
                     process.Start();
@@ -166,6 +171,15 @@ namespace CameraModule
                     {
                         await UploadFileAsync("timelapse", targetFilePath);
                     }
+
+                    // clean up temporary folder
+                    TryRemoveFolder(imgCaptureHandler.ProcessedFiles.First().Directory);
+
+                    // notify
+                    await this.mediator.Publish(new TimelapseTakenNotification()
+                    {
+                        Timelapse = currentTimelapseId,
+                    });
 
                 }
             }
@@ -184,6 +198,27 @@ namespace CameraModule
             }
         }
 
+        private bool TryRemoveFolder(string directory)
+        {
+            try
+            {
+                foreach (var f in Directory.GetFiles(directory))
+                {
+                    File.Delete(f);
+                }
+
+                Directory.Delete(directory);
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, $"Error clearing folder {directory}");
+            }
+
+            return false;
+        }
+
         public StopTimelapseResponse StopTimelapse(StopTimelapseRequest req)
         {
             if (!IsTakingTimelapse())
@@ -194,10 +229,14 @@ namespace CameraModule
                 };
             }
 
+            var timelapseId = this.currentTimelapseId;
             this.timelapseCts.Cancel();
             Logger.Log($"Timelapse {currentTimelapseId ?? string.Empty} stopped");
 
-            return new StopTimelapseResponse();
+            return new StopTimelapseResponse() 
+            {
+                Id = timelapseId,
+            };
         }
 
         public async Task<TakePhotoResponse> TakePhotoAsync(TakePhotoRequest takePhotoRequest)
@@ -210,17 +249,16 @@ namespace CameraModule
                 return new TakePhotoResponse()
                 {
                     ErrorMessage = $"Timelapse {currentTimelapseId?.ToString()} is being taken",
+                    IsTakingTimelapse = true,
                 };
             }
 
             try
             {
-                var path = configuration.EnsureOutputDirectoryExists();
-
                 await cameraInUse.WaitAsync();
                 cameraWasUsed = true;
 
-                using (var imgCaptureHandler = new ImageStreamCaptureHandler(path, takePhotoRequest.ImageType))        
+                using (var imgCaptureHandler = new ImageStreamCaptureHandler(takePhotoRequest.OutputDirectory, takePhotoRequest.ImageType))        
                 {            
                     var stopwatch = Stopwatch.StartNew();
 
@@ -349,21 +387,12 @@ namespace CameraModule
             GC.SuppressFinalize(this);
         }
 
-        public Task<IReadOnlyList<string>> GetImagesAsync()
+        public CameraStatus GetCameraStatus()
         {
-            var fileList = new List<string>();
-            foreach (var file in Directory.GetFiles(configuration.GetOuputDirectory()))
-                fileList.Add(Path.GetFileName(file));
-
-            // sort descending
-            fileList.Sort((t1, t2) => t2.CompareTo(t1));
-
-            return Task.FromResult<IReadOnlyList<string>>(fileList);
-        }
-
-        public Task<Stream> GetImageStreamAsync(string image)
-        {
-            return Task.FromResult<Stream>(File.OpenRead(Path.Combine(configuration.GetOuputDirectory(), image)));
+            return new CameraStatus()
+            {
+                IsTakingTimelapse = !string.IsNullOrEmpty(this.currentTimelapseId),
+            };
         }
 
         #endregion

@@ -37,7 +37,8 @@
       "console": "internalConsole",
       "env": {
         "EdgeHubConnectionString": "${config:azure-iot-edge.EdgeHubConnectionString}",
-        "webserver": "1"
+        "webserver": "1",
+        "cameraouputdirectory": "${workspaceRoot}/modules/CameraModule/testCameraOutput"
         
       }
     }

@@ -1,4 +1,4 @@
-namespace CameraModule
+namespace CameraModule.Models
 {
     using System;
     using MMALSharp.Native;
@@ -14,6 +14,8 @@ namespace CameraModule
             get => imageType;
             set => imageType = string.IsNullOrEmpty(value) ? "jpeg" : value;
         }
+
+        public string OutputDirectory { get; set; }
 
         string pixelFormat = "I420";
 

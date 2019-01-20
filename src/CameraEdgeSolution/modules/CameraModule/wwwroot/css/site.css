@@ -67,3 +67,11 @@ ul#album li {
 img.selected-image {
   max-height: 500px;
 }
+
+#workingFlag {
+  padding: 12px 10px;
+}
+
+#album > img.img-thumbnail {
+  cursor: pointer;
+}

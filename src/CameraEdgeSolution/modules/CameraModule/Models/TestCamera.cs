@@ -2,8 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+
 #if DEBUG
-namespace CameraModule
+namespace CameraModule.Models
 {
     public class TestCamera : ICamera
     {
@@ -38,9 +39,21 @@ namespace CameraModule
             });
         }
 
-        public Task<IReadOnlyList<string>> GetImagesAsync() => Task.FromResult<IReadOnlyList<string>>(this.mockupPhotos);
+        public Task<IReadOnlyList<string>> GetPhotosAsync() => Task.FromResult<IReadOnlyList<string>>(this.mockupPhotos);
 
-        public Task<Stream> GetImageStreamAsync(string image) => Task.FromResult<Stream>(File.OpenRead(Path.Combine(basePath, image)));
+        public Task<Stream> GetPhotoStreamAsync(string image) => Task.FromResult<Stream>(File.OpenRead(Path.Combine(basePath, image)));
+
+        public Task<IReadOnlyList<string>> GetTimelapsesAsync() => Task.FromResult<IReadOnlyList<string>>(new string[0]);
+
+        public Task<Stream> GetTimelapseStreamAsync(string timelapse) => Task.FromResult((Stream)null);
+
+        public CameraStatus GetCameraStatus()
+        {
+            return new CameraStatus()
+            {
+                IsTakingTimelapse = false,
+            };
+        }
     }
 }
 #endif

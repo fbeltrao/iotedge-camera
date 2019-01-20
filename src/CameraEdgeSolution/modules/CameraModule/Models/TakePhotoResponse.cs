@@ -1,6 +1,6 @@
 using Newtonsoft.Json;
 
-namespace CameraModule
+namespace CameraModule.Models
 {
     public class TakePhotoResponse
     {
@@ -28,5 +28,8 @@ namespace CameraModule
         [JsonProperty("suceeded")]
         // Request succeded
         public bool Succeded => (string.IsNullOrEmpty(ErrorMessage));
+
+        [JsonProperty("isTakingTimelapse")]
+        public bool IsTakingTimelapse { get;  set; }
     }
 }

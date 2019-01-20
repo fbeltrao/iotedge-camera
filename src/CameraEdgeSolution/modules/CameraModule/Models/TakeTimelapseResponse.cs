@@ -2,7 +2,7 @@ using System;
 using Microsoft.Azure.Devices.Client;
 using Newtonsoft.Json;
 
-namespace CameraModule
+namespace CameraModule.Models
 {
     public class TakeTimelapseResponse
     {
@@ -29,5 +29,8 @@ namespace CameraModule
         [JsonProperty("suceeded")]
         // Request succeded
         public bool Succeded => (string.IsNullOrEmpty(ErrorMessage));
+
+        [JsonProperty("isTakingTimelapse")]
+        public bool IsTakingTimelapse { get;  set; }
     }
 }

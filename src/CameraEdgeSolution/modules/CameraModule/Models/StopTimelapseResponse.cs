@@ -2,7 +2,7 @@ using System;
 using Microsoft.Azure.Devices.Client;
 using Newtonsoft.Json;
 
-namespace CameraModule
+namespace CameraModule.Models
 {
     public class StopTimelapseResponse
     {

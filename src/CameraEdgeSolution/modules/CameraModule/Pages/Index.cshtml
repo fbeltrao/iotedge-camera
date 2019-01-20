@@ -4,20 +4,23 @@
     ViewData["Title"] = "Home page";
 }
 
-
 <div class="text-center">
     <div id="app">
         <div class="row">
             <div class="col-xs-6">
-                <button class="btn btn-lg btn-primary" :disabled="isWorking" v-on:click="newPhoto">Take Photo</button>
+                <button class="btn btn-lg btn-primary" :disabled="isWorking || isTakingTimelapse" v-on:click="newPhoto">Photo</button>
+                <button class="btn btn-lg btn-primary" :disabled="isWorking" v-on:click="toggleTimeLapse">{{ timelapseButtonText }}</button>
             </div>
             <div class="col-xs-6">
-                {{ message }}
+                <div v-show="isWorking" id="workingFlag">working...</div>
             </div>
         </div>
         <div class="row selected-image">
             <div class="col-xs-12">
-                <img class="selected-image" v-bind:src="selectedImageURL" /> 
+                <img class="selected-image" v-show="!selectedTimelapseURL" v-bind:src="selectedImageURL" />
+                <video v-if="selectedTimelapseURL" width="320" height="240" controls>
+                    <source v-bind:src="selectedTimelapseURL" type="video/mp4">
+                </video> 
             </div>
         </div>
 
@@ -43,7 +46,10 @@ var app = new Vue({
             photos: [],
             selectedImageURL: '',
             apiURL: '',
-            isWorking: false
+            isWorking: false, // flag indicating that a api call is in process
+            isTakingTimelapse: false, // flag indicating that a timelapse is in progress
+            timelapseButtonText: 'Timelapse',
+            selectedTimelapseURL: ''
         }, methods: {
             getThumbnailURL: function(image) {
                 return this.apiURL + '/api/camera/photos/' + encodeURI(image) + "?width=80&height=62"
@@ -56,21 +62,64 @@ var app = new Vue({
                     .then(response => {
                         this.message = '';
                         this.isWorking = false;
+                    })
+                    .catch((error) => {
+                        this.isWorking = false;
+                        console.log(error);
                     });                
             },
             selectPhoto: function(photoItem) {
                 this.selectedImageURL = photoItem.imageURL;
+            },
+            showTimelapse: function(timelapse) {
+                selectedTimelapseURL = this.apiURL + '/api/camera/timelapses/' + encodeURIComponent(timelapse);
+            },
+            updateTakingTimelapse: function(newState) {
+                if (newState != this.isTakingTimelapse) {
+                    this.isTakingTimelapse = newState;
+                    this.timelapseButtonText = this.isTakingTimelapse ? 'Timelapse' : 'Stop timelapse';
+                }
+            },
+            toggleTimeLapse: function() {
+                if (this.isTakingTimelapse) {
+                    axios
+                        .post(this.apiURL + '/api/camera/timelapses/stop')
+                        .then(response => {
+                            this.message = '';
+                            this.isWorking = false;
+                            this.updateTakingTimelapse(false);
+                        })
+                        .catch((error) => {
+                            this.isWorking = false;
+                            this.updateTakingTimelapse(error.response.isTakingTimelapse);
+                            console.log(error);
+                        });
+                } else {
+                    axios
+                        .post(this.apiURL + '/api/camera/timelapses/start')
+                        .then(response => {
+                            this.message = '';
+                            this.isWorking = false;
+                            this.updateTakingTimelapse(true);
+                        })
+                        .catch((error) => {
+                            this.isWorking = false;
+                            this.updateTakingTimelapse(error.response.isTakingTimelapse);
+                            console.log(error);
+                        });
+                }
             }
         },
         mounted() {
             // gets the current photos
             this.apiURL = window.location.protocol + "//" + window.location.hostname + ":" + window.location.port;
             axios
-                .get(this.apiURL + '/api/camera/photos')
+                .get(this.apiURL + '/api/camera')
                 .then(response => {
-                    for (var i=0; i < response.data.length; ++i){
-                        var imageName = response.data[i];
-                        var imageURL = this.apiURL + '/api/camera/photos/' + encodeURI(imageName);
+                    this.updateTakingTimelapse(response.data.isTakingTimelapse);
+                    for (var i=0; i < response.data.photos.length; ++i){
+                        var imageName = response.data.photos[i];
+                        var imageURL = this.apiURL + '/api/camera/photos/' + encodeURIComponent(imageName);
                         var newItem = { imageURL: imageURL, thumbnailURL: this.getThumbnailURL(imageName) };
                         this.photos.push(newItem);
                     }
@@ -88,12 +137,24 @@ var app = new Vue({
 
             connection.on("onnewphoto", (message) => {
                 if (message.filename) {
-                    var newImageURL = this.apiURL + '/api/camera/photos/' + encodeURI(message.filename);
+                    var newImageURL = this.apiURL + '/api/camera/photos/' + encodeURIComponent(message.filename);
                     var newItem = { imageURL: newImageURL, thumbnailURL: this.getThumbnailURL(message.filename) };
                         
                     this.photos.unshift(newItem);
                     this.selectedImageURL = newImageURL;
+                    this.selectedTimelapseURL = '';
                 } 
+            });
+
+            connection.on("onnewtimelapse", (message) => {
+                if (message.timelapse){
+                    this.showTimelapse(message.timelapse);
+                }
+                this.updateTakingTimelapse(false);
+            });
+
+            connection.on("ontimelapsestarted", (message) => {
+                this.updateTakingTimelapse(true);
             });
         }
     });

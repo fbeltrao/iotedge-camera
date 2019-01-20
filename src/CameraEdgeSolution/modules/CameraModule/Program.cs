@@ -7,6 +7,8 @@ namespace CameraModule
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
+    using CameraModule.Models;
+    using MediatR;
     using Microsoft.AspNetCore.Hosting;
     using Microsoft.Azure.Devices.Client;
     using Microsoft.Azure.Devices.Shared;
@@ -28,14 +30,15 @@ namespace CameraModule
                 })
                 .ConfigureServices((hostContext, services) =>
                 {
+                    services.AddModuleClient(new AmqpTransportSettings(Microsoft.Azure.Devices.Client.TransportType.Amqp_Tcp_Only));
                     services.AddSingleton<CameraConfiguration>(CameraConfiguration.CreateFromEnvironmentVariables());
-
                     services.AddSingleton<ICamera, PiCamera>();
+                    services.AddMediatR(typeof(Program).Assembly);
                     //services.AddSingleton<ICamera, TestCamera>();
-                    services.AddSingleton<IoTHubModuleConnector>();
-                    services.AddSingleton<IHostedService, IoTHubModuleConnector>(sp => {
-                        return (IoTHubModuleConnector)sp.GetService(typeof(IoTHubModuleConnector));
-                    });
+                    //services.AddSingleton<IoTHubModuleConnector>();
+                    // services.AddSingleton<IHostedService, IoTHubModuleConnector>(sp => {
+                    //     return (IoTHubModuleConnector)sp.GetService(typeof(IoTHubModuleConnector));
+                    // });
                 })
                 .ConfigureLogging((hostContext, configLogging) =>
                 {

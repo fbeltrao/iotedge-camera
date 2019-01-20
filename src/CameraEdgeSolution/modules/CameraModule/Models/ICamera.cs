@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace CameraModule
+namespace CameraModule.Models
 {
     public interface ICamera
     {
@@ -11,7 +11,6 @@ namespace CameraModule
         Task<TakeTimelapseResponse> StartTimelapseAsync(TakeTimelapseRequest req);
         Task<TakePhotoResponse> TakePhotoAsync(TakePhotoRequest req);
         bool Initialize();
-        Task<IReadOnlyList<string>> GetImagesAsync();
-        Task<Stream> GetImageStreamAsync(string image);
+        CameraStatus GetCameraStatus();
     }
 }

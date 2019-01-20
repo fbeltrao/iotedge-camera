@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using MediatR;
 using Microsoft.Azure.Devices.Client;
 using Microsoft.Azure.Devices.Shared;
 using MMALSharp;
 
-namespace CameraModule
+namespace CameraModule.Models
 {
     public class CameraConfiguration
     {
@@ -24,6 +26,8 @@ namespace CameraModule
         public int? CameraPhotoResolutionWidth { get; set; }
         public int? CameraPhotoResolutionHeight { get; set; }
 
+        public string CameraOutputDirectory { get; set; } = "/cameraoutput";
+
         HashSet<Action> subscribers = new HashSet<Action>();
 
         // Subscribe to changes in the configuration
@@ -38,6 +42,14 @@ namespace CameraModule
 
         internal void InitializeFromEnvironmentVariables()
         {
+            var cameraOutputDirectoryEnv = Environment.GetEnvironmentVariable("cameraouputdirectory");
+            if (!string.IsNullOrEmpty(cameraOutputDirectoryEnv))
+            {
+                this.CameraOutputDirectory = cameraOutputDirectoryEnv;
+                Logger.Log($"Using camera output directory {this.CameraOutputDirectory}");
+
+            }
+
             var storageAccountEnv = Environment.GetEnvironmentVariable("storageaccount");
             if (!string.IsNullOrEmpty(storageAccountEnv))
             {
@@ -79,18 +91,7 @@ namespace CameraModule
             }
         }
 
-        // Connects the configuration to an IoT Edge module twin
-        internal async Task ConnectToModuleAsync(ModuleClient moduleClient)
-        {
-            var twin = await moduleClient.GetTwinAsync();
-            await UpdateFromTwin(twin.Properties?.Desired, moduleClient);
-
-            await moduleClient.SetDesiredPropertyUpdateCallbackAsync(UpdateFromTwin, moduleClient);
-
-            Logger.Log("Twin changes callback is set");
-        }
-
-        internal Task UpdateFromTwin(TwinCollection desired, object userContext)
+        internal Task UpdateFromTwin(TwinCollection desired)
         {
             if (desired == null)
                 return Task.FromResult(0);
@@ -171,17 +172,17 @@ namespace CameraModule
     
     
           // Gets the output directory
-        internal string  GetOuputDirectory()
+        internal string GetOuputDirectory()
         {
-            if (Directory.Exists("/cameraoutput"))
-                return "/cameraoutput";
+            if (Directory.Exists(CameraOutputDirectory))
+                return CameraOutputDirectory;
 
             return "./cameraoutput";
         }
 
-        internal string EnsureOutputDirectoryExists()
+        internal string EnsureOutputDirectoryExists(string subFolder)
         {
-            var directory = GetOuputDirectory();
+            var directory = Path.Combine(GetOuputDirectory(), subFolder);
             try
             {
                 if (!Directory.Exists(directory))
@@ -197,6 +198,22 @@ namespace CameraModule
             {
                 throw new Exception($"Failed to create '{directory}' folder", ex);
             }
+        }
+    }
+
+    public class ModuleTwinChangeHandlerForConfiguration : INotificationHandler<ModuleTwinChangedNotification>
+    {
+        private readonly CameraConfiguration configuration;
+
+        public ModuleTwinChangeHandlerForConfiguration(CameraConfiguration configuration)
+        {
+            this.configuration = configuration;
+        }
+
+        public Task Handle(ModuleTwinChangedNotification notification, CancellationToken cancellationToken)
+        {
+            this.configuration.UpdateFromTwin(notification.Twin);
+            return Task.FromResult(0);
         }
     }
 }
