@@ -20,12 +20,12 @@ namespace CameraModule.Models
 
         public bool Initialize() => true;
 
-        public Task<TakeTimelapseResponse> StartTimelapseAsync(TakeTimelapseRequest req)
+        public Task<CameraTimelapseBase> CreateTimelapseAsync(TakeTimelapseRequest req)
         {
-            return Task.FromResult(new TakeTimelapseResponse());
+            throw new NotImplementedException();
         }
 
-        public StopTimelapseResponse StopTimelapse(StopTimelapseRequest req) => new StopTimelapseResponse();
+        public Task<StopTimelapseResponse> StopTimelapseAsync(StopTimelapseRequest req) => Task.FromResult(new StopTimelapseResponse());
 
         public Task<TakePhotoResponse> TakePhotoAsync(TakePhotoRequest req)
         {

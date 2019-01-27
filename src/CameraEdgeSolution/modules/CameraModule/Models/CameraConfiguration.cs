@@ -23,8 +23,11 @@ namespace CameraModule.Models
         // Get/sets the camera rotation
         public int CameraRotation { get; set; }
 
-        public int? CameraPhotoResolutionWidth { get; set; }
-        public int? CameraPhotoResolutionHeight { get; set; }
+        public int? CameraPhotoResolutionWidth { get; set; } = 2560;
+        public int? CameraPhotoResolutionHeight { get; set; } = 1920;
+
+        public int? CameraTimelapseResolutionWidth { get; set; } = 1280;
+        public int? CameraTimelapseResolutionHeight { get; set; } = 800;
 
         public string CameraOutputDirectory { get; set; } = "/cameraoutput";
 
@@ -47,7 +50,6 @@ namespace CameraModule.Models
             {
                 this.CameraOutputDirectory = cameraOutputDirectoryEnv;
                 Logger.Log($"Using camera output directory {this.CameraOutputDirectory}");
-
             }
 
             var storageAccountEnv = Environment.GetEnvironmentVariable("storageaccount");
@@ -148,6 +150,30 @@ namespace CameraModule.Models
                 if (!resolutionSet)
                 {
                     Logger.Log($"Invalid photo resolution: {photoResolutionValue}. Should be WidthxHeight (i.e. 640x480)");
+                }
+            }
+
+            if (desired.Contains("timelapseresolution"))
+            {
+                var timelapseResolutionValue = (string)desired["timelapseresolution"];
+                var wh = timelapseResolutionValue.Split('x');
+                var resolutionSet = false;
+                if (wh.Length == 2)
+                {
+                    if (int.TryParse(wh[0], out var width))
+                    {
+                        if (int.TryParse(wh[1], out var height))
+                        {
+                            this.CameraTimelapseResolutionHeight = height;
+                            this.CameraTimelapseResolutionWidth = width;
+                            resolutionSet = true;
+                        }
+                    }
+                }
+
+                if (!resolutionSet)
+                {
+                    Logger.Log($"Invalid timelapse resolution: {timelapseResolutionValue}. Should be WidthxHeight (i.e. 640x480)");
                 }
             }
 

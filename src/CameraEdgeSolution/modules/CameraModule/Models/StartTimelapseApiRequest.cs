@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -14,6 +15,7 @@ namespace CameraModule.Models
         private readonly ICamera camera;
         private readonly CameraConfiguration configuration;
         private readonly IMediator mediator;
+        private CameraTimelapseBase timelapse;
 
         public StartTimelapseApiRequestHandler(ICamera camera, CameraConfiguration configuration, IMediator mediator)
         {
@@ -24,21 +26,56 @@ namespace CameraModule.Models
 
         public async Task<TakeTimelapseResponse> Handle(StartTimelapseApiRequest request, CancellationToken cancellationToken)
         {
-            var response = await camera.StartTimelapseAsync(new TakeTimelapseRequest()
+            try
             {
-                OutputDirectory = configuration.EnsureOutputDirectoryExists(Constants.TimelapsesSubFolderName),
-            });
+                this.timelapse = await camera.CreateTimelapseAsync(new TakeTimelapseRequest()
+                {
+                    OutputDirectory = configuration.EnsureOutputDirectoryExists(Constants.TimelapsesSubFolderName),
+                });
 
-            if (response.Succeded)
-            {
+                timelapse.OnFinished = OnTimelapseFinished;
+                timelapse.OnTimelapsePhotoTaken = OnTimelapsePhotoTaken;
+
                 await mediator.Publish(new TimelapseStartedNotification()
                 {
-                    Timelapse = response.Id,
+                    Timelapse = timelapse.ID,
                 });
-            }
-          
+                
+                timelapse.Start();
 
-            return response;
+                return new TakeTimelapseResponse()
+                {
+                    Duration = (int)timelapse.Duration.TotalSeconds,
+                    Interval = (int)timelapse.Interval.TotalSeconds,
+                    Id = timelapse.ID,
+                };
+            }
+            catch (TimelapseInProgressException)
+            {
+                return new TakeTimelapseResponse()
+                {
+                    ErrorMessage = "Timelapse already in progress",
+                    IsTakingTimelapse = true,
+                };
+            }
+        }
+
+        private async Task OnTimelapsePhotoTaken(CameraTimelapseBase arg1, TakePhotoResponse arg2)
+        {
+            await mediator.Publish(new PhotoTakenNotification()
+            {
+                Details = arg2,
+                IsTimelapsePhoto = true,
+                Timelapse = this.timelapse.ID,
+            });
+        }
+
+        private async Task OnTimelapseFinished(CameraTimelapseBase timelapse)
+        {
+            await mediator.Publish(new TimelapseTakenNotification()
+            {
+                Timelapse = timelapse.ID,
+            });
         }
     }
 }

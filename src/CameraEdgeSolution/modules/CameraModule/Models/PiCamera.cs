@@ -13,7 +13,9 @@ using Microsoft.Azure.Devices.Shared;
 using Microsoft.Extensions.Options;
 using Microsoft.WindowsAzure.Storage;
 using MMALSharp;
+using MMALSharp.Common.Utility;
 using MMALSharp.Components;
+using MMALSharp.Config;
 using MMALSharp.Handlers;
 using MMALSharp.Native;
 using Newtonsoft.Json;
@@ -22,17 +24,14 @@ namespace CameraModule.Models
 {
     public class PiCamera : ICamera, IDisposable
     {      
-        const string TimestampFormat = "yyyy-MM-dd-HH-mm-ss";
-
         private readonly CameraConfiguration configuration;
         private readonly IMediator mediator;
         MMALCamera camera;
-
+        Resolution? stillResolution;
+        Resolution? timelapseResolution;
         SemaphoreSlim cameraInUse = new SemaphoreSlim(1);
 
-        string currentTimelapseId = null;
-        private string currentTimelapseOutputDirectory;
-        CancellationTokenSource timelapseCts;
+        PiCameraTimelapse currentTimelapse;
 
         public PiCamera(CameraConfiguration configuration, IMediator mediator)
         {
@@ -51,8 +50,17 @@ namespace CameraModule.Models
                 this.configuration.CameraPhotoResolutionHeight.Value > 0 &&
                 this.configuration.CameraPhotoResolutionWidth.Value > 0)
             {
-                MMALCameraConfig.StillResolution = new Resolution(this.configuration.CameraPhotoResolutionWidth.Value, this.configuration.CameraPhotoResolutionHeight.Value);
+                this.stillResolution = new Resolution(this.configuration.CameraPhotoResolutionWidth.Value, this.configuration.CameraPhotoResolutionHeight.Value);
                 Logger.Log($"Camera photo resolution: {this.configuration.CameraPhotoResolutionWidth.Value}x{this.configuration.CameraPhotoResolutionHeight.Value}");
+            }
+
+            if (this.configuration.CameraTimelapseResolutionWidth.HasValue &&
+                this.configuration.CameraTimelapseResolutionHeight.HasValue &&
+                this.configuration.CameraTimelapseResolutionHeight.Value > 0 &&
+                this.configuration.CameraTimelapseResolutionWidth.Value > 0)
+            {
+                this.timelapseResolution = new Resolution(this.configuration.CameraTimelapseResolutionWidth.Value, this.configuration.CameraTimelapseResolutionHeight.Value);
+                Logger.Log($"Camera timelapse resolution: {this.configuration.CameraTimelapseResolutionWidth.Value}x{this.configuration.CameraTimelapseResolutionHeight.Value}");
             }
         }
 
@@ -79,193 +87,69 @@ namespace CameraModule.Models
             return true;
         }
 
-        bool IsTakingTimelapse() => currentTimelapseId != null;
+        bool IsTakingTimelapse() => this.currentTimelapse != null;
 
-
-        public async Task<TakeTimelapseResponse> StartTimelapseAsync(TakeTimelapseRequest req)
+        public Task<CameraTimelapseBase> CreateTimelapseAsync(TakeTimelapseRequest req)
         {
             if (IsTakingTimelapse())
             {
-                return new TakeTimelapseResponse()
-                {
-                    ErrorMessage = $"Timelapse {currentTimelapseId?.ToString()} is being taken",
-                    IsTakingTimelapse = true,
-                };
+               throw new TimelapseInProgressException();
             }
 
-            var cameraUsed = false;
+            var duration = TimeSpan.FromMinutes(10);
+            var interval = TimeSpan.FromSeconds(10);
+            this.currentTimelapse = new PiCameraTimelapse(interval, duration, this.configuration, this);
+            return Task.FromResult<CameraTimelapseBase>(this.currentTimelapse);
+        }      
 
-            try
-            {
-                currentTimelapseId = DateTime.UtcNow.ToString(TimestampFormat);
-                currentTimelapseOutputDirectory = req.OutputDirectory; 
-                var pathForImages = Path.Combine(req.OutputDirectory, currentTimelapseId);
-                
-                await cameraInUse.WaitAsync();
-                cameraUsed = true;
+        
 
-                // This example will take an image every 10 seconds for 4 hours
-                var imgCaptureHandler = new ImageStreamCaptureHandler(pathForImages, "jpg");
-                timelapseCts = new CancellationTokenSource(TimeSpan.FromSeconds(req.Duration));
-                var tl = new Timelapse { Mode = TimelapseMode.Second, CancellationToken = timelapseCts.Token, Value = req.Interval };
-
-                Logger.Log($"Starting timelapse {currentTimelapseId}");
-                _ = camera.TakePictureTimelapse(imgCaptureHandler, MMALEncoding.JPEG, MMALEncoding.I420, tl)
-                    .ContinueWith(async (t) => await PrepareTimelapseVideoAsync(t, imgCaptureHandler, pathForImages));
-
-                return new TakeTimelapseResponse()
-                {
-                    Id = currentTimelapseId,
-                    Duration = req.Duration,
-                    Interval = req.Interval,
-                };
-            }
-            catch
-            {
-                if (cameraUsed)
-                    cameraInUse.Release();
-
-                throw;
-            }
-        }
-
-        async Task PrepareTimelapseVideoAsync(Task captureImageTask, ImageStreamCaptureHandler imgCaptureHandler, string path)
-        {
-            try
-            {
-                //Logger.Log($"Prepare timelapse: {captureImageTask.IsCompletedSuccessfully}, {captureImageTask.IsFaulted}");
-
-                if (captureImageTask.IsCompletedSuccessfully)
-                {
-                    Logger.Log($"Will create timelapse {currentTimelapseId} video from {path}");
-
-                    if (imgCaptureHandler.ProcessedFiles.Count == 0)
-                        return;
-
-                    var process = new Process
-                    {
-                        StartInfo =
-                        {
-                            UseShellExecute = false,
-                            CreateNoWindow = true,
-                            FileName = "ffmpeg"
-                        }
-                    };
-
-                    var extension = imgCaptureHandler.ProcessedFiles.First().Extension;
-
-                    var targetDirectory = configuration.EnsureOutputDirectoryExists(this.currentTimelapseOutputDirectory);
-                    var targetFilePath = Path.Combine(targetDirectory, string.Concat(currentTimelapseId, ".mp4"));
-                    var targetDirectoryInfo = Directory.CreateDirectory(targetDirectory);
-
-                    var fps = 2;
-                    //var args = $"-framerate {fps} -f image2 -pattern_type glob -y -i {path + "/*." + extension} {targetFilePath}";
-                    var args = $"-framerate {fps} -f image2 -pattern_type glob -y -i {path + "/*." + extension} -c:v libx264 -pix_fmt yuv420p {targetFilePath}";
-                    Logger.Log($"Starting ffmpeg with args: {args}");
-                    process.StartInfo.Arguments = args;
-                    process.Start();
-                    process.WaitForExit();
-
-                    Logger.Log($"Timelapse video for {currentTimelapseId} created");
-                    if (configuration.HasStorageInformation())
-                    {
-                        await UploadFileAsync("timelapse", targetFilePath);
-                    }
-
-                    // clean up temporary folder
-                    TryRemoveFolder(imgCaptureHandler.ProcessedFiles.First().Directory);
-
-                    // notify
-                    await this.mediator.Publish(new TimelapseTakenNotification()
-                    {
-                        Timelapse = currentTimelapseId,
-                    });
-
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Failed to create timelapse video");
-            }
-            finally
-            {
-                currentTimelapseId = null;
-                imgCaptureHandler?.Dispose();
-                timelapseCts?.Dispose();
-                timelapseCts = null;
-
-                cameraInUse.Release();                
-            }
-        }
-
-        private bool TryRemoveFolder(string directory)
-        {
-            try
-            {
-                foreach (var f in Directory.GetFiles(directory))
-                {
-                    File.Delete(f);
-                }
-
-                Directory.Delete(directory);
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, $"Error clearing folder {directory}");
-            }
-
-            return false;
-        }
-
-        public StopTimelapseResponse StopTimelapse(StopTimelapseRequest req)
+        public Task<StopTimelapseResponse> StopTimelapseAsync(StopTimelapseRequest req)
         {
             if (!IsTakingTimelapse())
             {
-                return new StopTimelapseResponse()
+                return Task.FromResult(new StopTimelapseResponse()
                 {
                     ErrorMessage = "No timelapse being taken"
-                };
+                });
             }
 
-            var timelapseId = this.currentTimelapseId;
-            this.timelapseCts.Cancel();
-            Logger.Log($"Timelapse {currentTimelapseId ?? string.Empty} stopped");
+            var timelapseId = this.currentTimelapse?.ID;
+            this.currentTimelapse.Stop();
+            this.currentTimelapse = null;
+            
+            Logger.Log($"Timelapse {timelapseId ?? string.Empty} stopped");
 
-            return new StopTimelapseResponse() 
+            return Task.FromResult(new StopTimelapseResponse() 
             {
                 Id = timelapseId,
-            };
+            });
         }
 
-        public async Task<TakePhotoResponse> TakePhotoAsync(TakePhotoRequest takePhotoRequest)
+
+        internal async Task<TakePhotoResponse> TakeTimelapsePhotoAsync(string timelapse)
+        {
+            return await this.InternalTakePhotoAsync(Path.Combine(Constants.TimelapsesSubFolderName, timelapse), new TakePhotoRequest(), this.timelapseResolution);
+        }
+
+        async Task<TakePhotoResponse> InternalTakePhotoAsync(string subfolder, TakePhotoRequest takePhotoRequest, Resolution? resolution = null)
         {
             var cameraWasUsed = false;
-
-
-            if (IsTakingTimelapse())
-            {
-                return new TakePhotoResponse()
-                {
-                    ErrorMessage = $"Timelapse {currentTimelapseId?.ToString()} is being taken",
-                    IsTakingTimelapse = true,
-                };
-            }
 
             try
             {
                 await cameraInUse.WaitAsync();
                 cameraWasUsed = true;
 
-                using (var imgCaptureHandler = new ImageStreamCaptureHandler(takePhotoRequest.OutputDirectory, takePhotoRequest.ImageType))        
+                if (resolution.HasValue)
+                    MMALCameraConfig.StillResolution = resolution.Value;
+
+                var path = configuration.EnsureOutputDirectoryExists(subfolder);
+                using (var imgCaptureHandler = new ImageStreamCaptureHandler(path, takePhotoRequest.ImageType))        
                 {            
                     var stopwatch = Stopwatch.StartNew();
 
-                    if (takePhotoRequest.QuickMode)
-                        await camera.TakeRawPicture(imgCaptureHandler);
-                    else
-                        await camera.TakePicture(imgCaptureHandler, takePhotoRequest.GetImageEncoding(), takePhotoRequest.GetPixelFormatEncoding());                    
+                    await camera.TakePicture(imgCaptureHandler, takePhotoRequest.GetImageEncoding(), takePhotoRequest.GetPixelFormatEncoding());                    
                     stopwatch.Stop();
                     
                     var localFilePath = imgCaptureHandler.GetFilepath();
@@ -275,7 +159,7 @@ namespace CameraModule.Models
 
                     if (configuration.HasStorageInformation())
                     {
-                        await UploadFileAsync("photos", localFilePath);
+                        await IOUtils.UploadFileAsync(subfolder, localFilePath, this.configuration);
                     }
 
                     var fi = new FileInfo(localFilePath);
@@ -294,21 +178,30 @@ namespace CameraModule.Models
                         ImageType = takePhotoRequest.ImageType,
                         QuickMode = takePhotoRequest.QuickMode,
                     };
-                }           
-            }
+                }
+            }           
             finally
             {
                 if (cameraWasUsed)
                     cameraInUse.Release();
-
             }
+        }
+
+        public async Task<TakePhotoResponse> TakePhotoAsync(TakePhotoRequest takePhotoRequest)
+        {
+            if (IsTakingTimelapse())
+            {
+               throw new TimelapseInProgressException();
+            }
+
+            return await InternalTakePhotoAsync(Constants.PhotosSubFolderName, takePhotoRequest, this.stillResolution);
         }
 
         private string FixFilename(string localFilePath)
         {
             var directory = Path.GetDirectoryName(localFilePath);
             var extension = Path.GetExtension(localFilePath);
-            var now = DateTime.UtcNow.ToString(TimestampFormat);
+            var now = DateTime.UtcNow.ToString(Constants.TimestampFormat);
             for (var i=0; i < 5; i++)
             {
                 try
@@ -326,40 +219,6 @@ namespace CameraModule.Models
 
             // if we couldn't fix the name, return the original
             return localFilePath;
-        }
-
-        async Task<string> UploadFileAsync(string folder, string localFilePath)
-        {
-            if (CloudStorageAccount.TryParse($"DefaultEndpointsProtocol=https;AccountName={configuration.StorageAccount};AccountKey={configuration.StorageKey};EndpointSuffix=core.windows.net", out var cloudStorageAccount))
-            {
-                var blobClient = cloudStorageAccount.CreateCloudBlobClient();
-
-                var containerName = configuration.ModuleId;
-                if (string.IsNullOrEmpty(containerName))
-                    containerName = "camera";
-                Logger.Log($"Using container {containerName}");
-                var containerReference = blobClient.GetContainerReference(containerName);
-                
-                if (await containerReference.CreateIfNotExistsAsync())
-                {
-                    Logger.Log($"Container {containerName} created");
-                }
-
-                var filename = Path.GetFileName(localFilePath);
-
-                var blobName = $"{configuration.DeviceId}/{folder}/{filename}";
-                var appendBlob = containerReference.GetAppendBlobReference(blobName);
-
-                await appendBlob.UploadFromFileAsync(localFilePath);
-                Logger.Log($"File {localFilePath} copied to blob {blobName}");
-
-                return appendBlob.Uri.ToString();
-            }
-            else
-            {
-                Logger.Log("Failed to create cloud storage from connection string");
-                return string.Empty;
-            }
         }
 
         #region IDisposable Support
@@ -391,7 +250,7 @@ namespace CameraModule.Models
         {
             return new CameraStatus()
             {
-                IsTakingTimelapse = !string.IsNullOrEmpty(this.currentTimelapseId),
+                IsTakingTimelapse = this.currentTimelapse != null,
             };
         }
 

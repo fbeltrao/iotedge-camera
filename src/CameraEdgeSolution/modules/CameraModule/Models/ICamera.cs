@@ -7,8 +7,9 @@ namespace CameraModule.Models
 {
     public interface ICamera
     {
-        StopTimelapseResponse StopTimelapse(StopTimelapseRequest req);
-        Task<TakeTimelapseResponse> StartTimelapseAsync(TakeTimelapseRequest req);
+        Task<CameraTimelapseBase> CreateTimelapseAsync(TakeTimelapseRequest req);
+        Task<StopTimelapseResponse> StopTimelapseAsync(StopTimelapseRequest req);
+
         Task<TakePhotoResponse> TakePhotoAsync(TakePhotoRequest req);
         bool Initialize();
         CameraStatus GetCameraStatus();

@@ -17,9 +17,9 @@
         </div>
         <div class="row selected-image">
             <div class="col-xs-12">
-                <img class="selected-image" v-show="!selectedTimelapseURL" v-bind:src="selectedImageURL" />
-                <video v-if="selectedTimelapseURL" width="320" height="240" controls>
-                    <source v-bind:src="selectedTimelapseURL" type="video/mp4">
+                <img class="selected-image" v-show="selectedTimelapseURL.length == 0" :src="selectedImageURL" />
+                <video v-if="selectedTimelapseURL.length > 0" width="320" height="240" controls>
+                    <source :src="selectedTimelapseURL" type="video/mp4">
                 </video> 
             </div>
         </div>
@@ -28,7 +28,7 @@
             <div class="col-xs-12">
                 <ul class="list-inline" id="album">
                     <li class="list-inline-item" v-for="item in photos" v-on:click="selectPhoto(item)">
-                        <img class="img-thumbnail" v-bind:src="item.thumbnailURL" />
+                        <img class="img-thumbnail" :src="item.thumbnailURL" />
                     </li>
                 </ul>
             </div>
@@ -70,15 +70,16 @@ var app = new Vue({
             },
             selectPhoto: function(photoItem) {
                 this.selectedImageURL = photoItem.imageURL;
+                this.selectedTimelapseURL = '';
+                console.log('showing picture ' + this.selectedImageURL);
             },
             showTimelapse: function(timelapse) {
-                selectedTimelapseURL = this.apiURL + '/api/camera/timelapses/' + encodeURIComponent(timelapse);
+                this.selectedTimelapseURL = this.apiURL + '/api/camera/timelapses/' + encodeURIComponent(timelapse);
+                console.log('showing timelapse ' + this.selectedTimelapseURL);
             },
             updateTakingTimelapse: function(newState) {
-                if (newState != this.isTakingTimelapse) {
-                    this.isTakingTimelapse = newState;
-                    this.timelapseButtonText = this.isTakingTimelapse ? 'Timelapse' : 'Stop timelapse';
-                }
+                this.isTakingTimelapse = newState;
+                this.timelapseButtonText = this.isTakingTimelapse ? 'Stop timelapse' : 'Timelapse';
             },
             toggleTimeLapse: function() {
                 if (this.isTakingTimelapse) {
@@ -136,11 +137,18 @@ var app = new Vue({
             }));
 
             connection.on("onnewphoto", (message) => {
-                if (message.filename) {
-                    var newImageURL = this.apiURL + '/api/camera/photos/' + encodeURIComponent(message.filename);
-                    var newItem = { imageURL: newImageURL, thumbnailURL: this.getThumbnailURL(message.filename) };
-                        
-                    this.photos.unshift(newItem);
+                if (message.details.filename) {
+
+                    var newImageURL = '';
+                    if (message.isTimelapsePhoto) {
+                        newImageURL = this.apiURL + '/api/camera/timelapses/' + encodeURIComponent(message.timelapse) + '/' + encodeURIComponent(message.details.filename);
+                    } else {
+                        newImageURL = this.apiURL + '/api/camera/photos/' + encodeURIComponent(message.details.filename);
+                        var newItem = { imageURL: newImageURL, thumbnailURL: this.getThumbnailURL(message.details.filename) };           
+                        this.photos.unshift(newItem);
+                    }
+                    
+                    
                     this.selectedImageURL = newImageURL;
                     this.selectedTimelapseURL = '';
                 } 

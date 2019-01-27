@@ -15,7 +15,14 @@ namespace CameraModule.Models
 
     public class PhotoTakenNotification : INotification
     {
+        [JsonProperty("details")]
         public TakePhotoResponse Details { get; set; }
+
+        [JsonProperty("details")]
+        public string Timelapse { get; set; }
+
+        [JsonProperty("isTimelapsePhoto")]
+        public bool IsTimelapsePhoto { get; set; }
     }
 
     public class PhotoTakenNotificationSignalRHandler : INotificationHandler<PhotoTakenNotification>
@@ -28,7 +35,7 @@ namespace CameraModule.Models
         }
         public async Task Handle(PhotoTakenNotification notification, CancellationToken cancellationToken)
         {
-            await this.cameraHub.Clients.All.SendCoreAsync("onnewphoto", new object[] { notification.Details }, cancellationToken);            
+            await this.cameraHub.Clients.All.SendCoreAsync("onnewphoto", new object[] { notification }, cancellationToken);            
         }
     }
 
@@ -52,16 +59,26 @@ namespace CameraModule.Models
                 OutputDirectory = configuration.EnsureOutputDirectoryExists(Constants.PhotosSubFolderName),
             };
 
-            var response = await camera.TakePhotoAsync(photoRequest);
-            if (response.Succeded)
+            try
             {
-                await this.mediator.Publish(new PhotoTakenNotification()
+                var response = await camera.TakePhotoAsync(photoRequest);
+                if (response.Succeded)
                 {
-                    Details = response,
-                });
+                    await this.mediator.Publish(new PhotoTakenNotification()
+                    {
+                        Details = response,
+                    });
+                }
+                    
+                return response;
             }
-                
-            return response;
+            catch (TimelapseInProgressException)
+            {
+                return new TakePhotoResponse()
+                {
+                    IsTakingTimelapse = true,
+                };
+            }
         }
     }
 
