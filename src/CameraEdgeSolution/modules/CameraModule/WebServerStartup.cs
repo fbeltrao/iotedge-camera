@@ -28,7 +28,7 @@ namespace CameraModule
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_2);
-            services.AddMediatR(typeof(WebServerStartup).Assembly);
+            services.AddMediatR((c) => c.AsSingleton(), typeof(WebServerStartup).Assembly);
             services.AddModuleClient(new AmqpTransportSettings(Microsoft.Azure.Devices.Client.TransportType.Amqp_Tcp_Only));        
             services.AddSingleton<CameraConfiguration>(CameraConfiguration.CreateFromEnvironmentVariables());
             services.AddSingleton<ICamera, PiCamera>();

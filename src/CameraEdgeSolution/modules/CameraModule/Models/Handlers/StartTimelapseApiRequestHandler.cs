@@ -1,15 +1,9 @@
-using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 
 namespace CameraModule.Models
 {
-
-    public class StartTimelapseApiRequest : IRequest<TakeTimelapseResponse>
-    {  
-    }
-
     public class StartTimelapseApiRequestHandler : IRequestHandler<StartTimelapseApiRequest, TakeTimelapseResponse>
     {
         private readonly ICamera camera;
@@ -33,8 +27,24 @@ namespace CameraModule.Models
                     OutputDirectory = configuration.EnsureOutputDirectoryExists(Constants.TimelapsesSubFolderName),
                 });
 
-                timelapse.OnFinished = OnTimelapseFinished;
-                timelapse.OnTimelapsePhotoTaken = OnTimelapsePhotoTaken;
+                var localMediator = this.mediator;
+                timelapse.OnFinished = async (t) => {
+                    Logger.Log("OnFinished called");
+                    await localMediator.Publish(new TimelapseTakenNotification()
+                    {  
+                        Timelapse = t.ID,
+                    });
+                };           
+                
+                timelapse.OnTimelapsePhotoTaken = async (tm, photo) => {
+                    Logger.Log("OnTimelapsePhotoTaken called");
+                    await localMediator.Publish(new PhotoTakenNotification()
+                    {
+                        Details = photo,
+                        IsTimelapsePhoto = true,
+                        Timelapse = tm.ID,
+                    });
+                };
 
                 await mediator.Publish(new TimelapseStartedNotification()
                 {
@@ -58,24 +68,6 @@ namespace CameraModule.Models
                     IsTakingTimelapse = true,
                 };
             }
-        }
-
-        private async Task OnTimelapsePhotoTaken(CameraTimelapseBase arg1, TakePhotoResponse arg2)
-        {
-            await mediator.Publish(new PhotoTakenNotification()
-            {
-                Details = arg2,
-                IsTimelapsePhoto = true,
-                Timelapse = this.timelapse.ID,
-            });
-        }
-
-        private async Task OnTimelapseFinished(CameraTimelapseBase timelapse)
-        {
-            await mediator.Publish(new TimelapseTakenNotification()
-            {
-                Timelapse = timelapse.ID,
-            });
         }
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -28,7 +29,14 @@ namespace CameraModule.Models
 
         public async Task Handle(TimelapseStartedNotification notification, CancellationToken cancellationToken)
         {
-            await this.cameraHub.Clients.All.SendCoreAsync("ontimelapsestarted", new object[] { notification });            
+            try
+            {
+                await this.cameraHub.Clients.All.SendCoreAsync("ontimelapsestarted", new object[] { notification });            
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed sending signalr message ontimelapsestarted");
+            } 
         }
     }
 }

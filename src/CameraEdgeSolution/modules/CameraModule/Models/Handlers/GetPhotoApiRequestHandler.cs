@@ -9,16 +9,6 @@ using SixLabors.ImageSharp.Processing;
 
 namespace CameraModule.Models
 {
-    public class GetPhotoApiRequest : IRequest<Stream>
-    {
-        public string Photo { get; set; }
-
-        public int? Width { get; set; }
-
-        public int? Height { get; set; }
-
-    }
-
     public class GetPhotoApiRequestHandler : IRequestHandler<GetPhotoApiRequest, Stream>
     {
         private readonly ICamera camera;
@@ -31,6 +21,7 @@ namespace CameraModule.Models
             this.configuration = configuration;
             this.logger = logger;
         }
+        
         public async Task<Stream> Handle(GetPhotoApiRequest request, CancellationToken cancellationToken)
         {
             var originalFilePath = Path.Combine(this.configuration.EnsureOutputDirectoryExists(Constants.PhotosSubFolderName), request.Photo);
@@ -56,6 +47,7 @@ namespace CameraModule.Models
                         // might be created in parallel
                     }
                 }
+
                 var thumbnailFilePath = Path.Combine(thumbnailDirectory, thumbnailImageFileName);
 
                 await EnsureThumbnailExists(thumbnailFilePath, safeWidth, safeHeight, () => Task.FromResult<Stream>(File.OpenRead(originalFilePath)));

@@ -109,25 +109,49 @@ namespace CameraModule.Controllers
         }
 
 
-        [Route("timelapses/{timelapse}")]
+        [Route("timelapses/{timelapse}/video")]
         [HttpGet]
-        public async Task<IActionResult> GetTimelapseAsync(string timelapse)
+        public async Task<IActionResult> GetTimelapseVideoAsync(string timelapse)
         {
             try
             {
-                var response = await this.mediator.Send(new GetTimelapseStreamApiRequest()
+                var response = await this.mediator.Send(new GetTimelapseVideoApiRequest()
                 {
                     Timelapse = timelapse,
+                });
+                
+                if (response?.Stream == null)
+                    return NotFound();
+
+                return new FileStreamResult(response.Stream, "video/mp4");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error loading timelapse video");
+                throw;
+            }
+        }
+
+        [Route("timelapses/{timelapse}/{photo}")]
+        [HttpGet]
+        public async Task<IActionResult> GetTimelapsePhotoAsync(string timelapse, string photo)
+        {
+            try
+            {
+                var response = await this.mediator.Send(new GetTimelapsePhotoApiRequest()
+                {
+                    Timelapse = timelapse,
+                    Photo = photo,
                 });
                 
                 if (response == null)
                     return NotFound();
 
-                return new FileStreamResult(response, "video/mp4");
+                return new FileStreamResult(response, "image/jpeg");
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error creating timelapse");
+                logger.LogError(ex, "Error loading timelapse photo");
                 throw;
             }
         }

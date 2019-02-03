@@ -1,33 +1,12 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 
 namespace CameraModule.Models
 {
-    public class GetCameraStatusApiRequest : IRequest<GetCameraStatusApiResponse>
-    {
-
-    }
-
-    public class GetCameraStatusApiResponse
-    {
-        [JsonProperty("isTakingTimelapse")]
-        public bool IsTakingTimelapse { get; set; }        
-
-        [JsonProperty("photos")]
-        public IReadOnlyList<string> Photos { get; set; }
-
-        [JsonProperty("timelapses")]
-        public IReadOnlyList<string> Timelapses { get; set; }
-    }
-
-
     public class GetCameraStatusApiRequestHandler : IRequestHandler<GetCameraStatusApiRequest, GetCameraStatusApiResponse>
     {
         private readonly ICamera camera;

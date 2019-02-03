@@ -17,9 +17,9 @@
         </div>
         <div class="row selected-image">
             <div class="col-xs-12">
-                <img class="selected-image" v-show="selectedTimelapseURL.length == 0" :src="selectedImageURL" />
-                <video v-if="selectedTimelapseURL.length > 0" width="320" height="240" controls>
-                    <source :src="selectedTimelapseURL" type="video/mp4">
+                <img class="selected-image" v-show="selectedTimelapseVideoURL.length == 0" :src="selectedImageURL" />
+                <video v-if="selectedTimelapseVideoURL.length > 0" width="320" height="240" controls>
+                    <source :src="selectedTimelapseVideoURL" type="video/mp4">
                 </video> 
             </div>
         </div>
@@ -49,7 +49,7 @@ var app = new Vue({
             isWorking: false, // flag indicating that a api call is in process
             isTakingTimelapse: false, // flag indicating that a timelapse is in progress
             timelapseButtonText: 'Timelapse',
-            selectedTimelapseURL: ''
+            selectedTimelapseVideoURL: ''
         }, methods: {
             getThumbnailURL: function(image) {
                 return this.apiURL + '/api/camera/photos/' + encodeURI(image) + "?width=80&height=62"
@@ -70,12 +70,12 @@ var app = new Vue({
             },
             selectPhoto: function(photoItem) {
                 this.selectedImageURL = photoItem.imageURL;
-                this.selectedTimelapseURL = '';
+                this.selectedTimelapseVideoURL = '';
                 console.log('showing picture ' + this.selectedImageURL);
             },
             showTimelapse: function(timelapse) {
-                this.selectedTimelapseURL = this.apiURL + '/api/camera/timelapses/' + encodeURIComponent(timelapse);
-                console.log('showing timelapse ' + this.selectedTimelapseURL);
+                this.selectedTimelapseVideoURL = this.apiURL + '/api/camera/timelapses/' + encodeURIComponent(timelapse) + '/video';
+                console.log('showing timelapse ' + this.selectedTimelapseVideoURL);
             },
             updateTakingTimelapse: function(newState) {
                 this.isTakingTimelapse = newState;
@@ -150,7 +150,7 @@ var app = new Vue({
                     
                     
                     this.selectedImageURL = newImageURL;
-                    this.selectedTimelapseURL = '';
+                    this.selectedTimelapseVideoURL = '';
                 } 
             });
 

@@ -4,43 +4,37 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using Newtonsoft.Json;
 
 namespace CameraModule.Models
 {
-    public class VideoFromTimelapseApiRequest : IRequest<VideoFromTimelapseApiResponse>
-    {
-        [JsonProperty("timelapse")]
-        public string Timelapse { get; set; }
-    }
-
-    public class VideoFromTimelapseApiResponse
-    {   
-        [JsonProperty("timelapse")]
-        public string Timelapse { get; set; }
-
-        [JsonProperty("format")]
-        public string Format { get; set; }
-
-        [JsonProperty("errorMessage")]
-        public string ErrorMessage { get; set; }
-    }
-
-    public class VideoFromTimelapseApiRequestHandler : IRequestHandler<VideoFromTimelapseApiRequest, VideoFromTimelapseApiResponse>
+    public class GetTimelapseVideoApiRequestHandler : IRequestHandler<GetTimelapseVideoApiRequest, GetTimelapseVideoApiResponse>
     {
         private readonly CameraConfiguration configuration;
         private readonly IMediator mediator;
 
-        public VideoFromTimelapseApiRequestHandler(CameraConfiguration configuration, IMediator mediator)
+        public GetTimelapseVideoApiRequestHandler(CameraConfiguration configuration, IMediator mediator)
         {
             this.configuration = configuration;
             this.mediator = mediator;
         }
 
-        public async Task<VideoFromTimelapseApiResponse> Handle(VideoFromTimelapseApiRequest request, CancellationToken cancellationToken)
+        public async Task<GetTimelapseVideoApiResponse> Handle(GetTimelapseVideoApiRequest request, CancellationToken cancellationToken)
         {
             try
             {
+                var path = configuration.EnsureOutputDirectoryExists(Path.Combine(Constants.TimelapsesSubFolderName, request.Timelapse));
+                var targetFilePath = Path.Combine(request.Timelapse, string.Concat(request.Timelapse, ".mp4"));
+                
+                if (File.Exists(targetFilePath))
+                {
+                    return new GetTimelapseVideoApiResponse()
+                    {
+                        Stream = File.OpenRead(targetFilePath),
+                        Timelapse = request.Timelapse,
+                        Format = "mp4",
+                    };
+                }
+
                 var process = new Process
                 {
                     StartInfo =
@@ -51,12 +45,7 @@ namespace CameraModule.Models
                     }
                 };
 
-                var extension = ".jpeg";
-
-                var path = configuration.EnsureOutputDirectoryExists(Path.Combine(Constants.TimelapsesSubFolderName, request.Timelapse));
-                var targetFilePath = Path.Combine(request.Timelapse, string.Concat(request.Timelapse, ".mp4"));
-                
-
+                const string extension = ".jpeg";
                 var fps = 2;
                 var args = $"-framerate {fps} -f image2 -pattern_type glob -y -i {path + "/*." + extension} -c:v libx264 -pix_fmt yuv420p {targetFilePath}";
                 Logger.Log($"Starting ffmpeg with args: {args}");
@@ -70,18 +59,9 @@ namespace CameraModule.Models
                     await IOUtils.UploadFileAsync(Constants.TimelapsesSubFolderName, targetFilePath, this.configuration);
                 }
 
-                // clean up temporary folder
-                //IOUtils.TryRemoveFolder(imgCaptureHandler.ProcessedFiles.First().Directory);
-
-                // notify
-                await this.mediator.Publish(new TimelapseVideoNotification()
+                return new GetTimelapseVideoApiResponse()
                 {
-                    Timelapse = request.Timelapse,
-                    Format = "mp4",
-                });
-
-                return new VideoFromTimelapseApiResponse()
-                {
+                    Stream = File.OpenRead(targetFilePath),
                     Timelapse = request.Timelapse,
                     Format = "mp4",
                 };
@@ -89,7 +69,7 @@ namespace CameraModule.Models
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Failed to create timelapse video");
-                return new VideoFromTimelapseApiResponse()
+                return new GetTimelapseVideoApiResponse()
                 {
                     Timelapse = request.Timelapse,
                     ErrorMessage = "Failed to create timelapse video",

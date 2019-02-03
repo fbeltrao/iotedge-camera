@@ -16,7 +16,7 @@ The list below shows what is current available and what is planned for this solu
 [x] Integration with Azure Storage
 [ ] Integration with IoT Edge Azure Storage
 [ ] Demonstrate how to leverage Azure DevOps to build a CI pipeline running integration tests against the deployed module
-[  ] Sample application allowing to control the camera from anywhere in the internet
+[  ] Sample application allowing to control the camera from Internet
 
 ## Requirements
 
@@ -39,5 +39,50 @@ In order to give the sample application a try follow the steps below:
 - [Install Azure IoT Edge on your Raspberry PI](https://docs.microsoft.com/en-us/azure/iot-edge/how-to-install-iot-edge-linux-arm)
 
 - Install the camera module to your IoT Edge using the [Azure Portal](https://portal.azure.com/)
-  - Select your IoT Edge device in IoT Hub
-  - Click on Module
+  - Navigate to your IoT Hub
+  - Select "IoT Edge"
+  - Select your IoT Edge used in your Pi in the device list
+  - Click on "Set Modules"
+  - On Deployment Modules click "Add" then "IoT Edge Module"
+    - Name: camera
+    - Image URI: fbeltrao/iotedge-camera:0.1-arm32v7
+    - Container create options:
+```json
+{
+  "ExposedPorts": {
+    "80/tcp": {}
+  },
+  "Mounts": {
+    "Type": "bind",
+    "Source": "/home/pi/cameraoutput",
+    "Destination": "/cameraoutput",
+    "Mode": "",
+    "RW": true,
+    "Propagation": "rprivate"
+  },
+  "HostConfig": {
+    "Privileged": true,
+    "PortBindings": {
+      "80/tcp": [
+        {
+          "HostPort": "5003"
+        }
+      ]
+    },
+    "Binds": [
+      "/home/pi/cameraoutput:/cameraoutput"
+    ]
+  }
+}
+```
+  - Click Save, Next (twice) and finally Submit. After a few seconds the module should be running on your Pi.
+
+## Running using VsCode
+
+If builiding IoT Edge solutions is not 
+
+## Remarks
+
+- Taking pictures is using the [MMAL Sharp package](https://github.com/techyian/MMALSharp)
+- Thumbnail creation is using package [ImageSharp](https://github.com/SixLabors/ImageSharp)
+- The [Mediatr](https://github.com/jbogard/MediatR) package is used to create a clean separation of concerns (actions, notifications, outside interfaces). It ultimately allows same code to be execute from IoT Hub module direct method calls or web api REST calls. Some required pumpling code found in this repository can help you quick start in adopting it in new or existing IoT Edge modules.

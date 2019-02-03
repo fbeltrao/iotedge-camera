@@ -6,11 +6,6 @@ using MediatR;
 
 namespace CameraModule.Models
 {
-    public class GetPhotosApiRequest : IRequest<IReadOnlyList<string>>
-    {
-        
-    }
-
     public class GetPhotosApiRequestHandler : IRequestHandler<GetPhotosApiRequest, IReadOnlyList<string>>
     {
         private readonly CameraConfiguration configuration;

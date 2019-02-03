@@ -34,26 +34,33 @@ namespace CameraModule.Models
                 throw new InvalidOperationException("Timelapse already started");
 
             this.cancellationTokenSource = new CancellationTokenSource(this.Duration);
-            _ = this.TakeTimelapseAsync(this.cancellationTokenSource.Token)
-                    .ContinueWith(OnTimelapseEnded, null);
-        }
-
-        private void OnTimelapseEnded(Task task, object _)
-        {
-            if (this.OnFinished != null)
-                _ = this.OnFinished(this);
+            _ = this.TakeTimelapseAsync(this.cancellationTokenSource.Token);
         }
 
         async Task TakeTimelapseAsync(CancellationToken cts)
         {
-            while (!cts.IsCancellationRequested)
+            try
             {
-                var timelapsePhoto = await TakeTimelapsePhotoAsync();
+                while (!cts.IsCancellationRequested)
+                {
+                    var timelapsePhoto = await TakeTimelapsePhotoAsync();
 
-                if (OnTimelapsePhotoTaken != null)
-                    await OnTimelapsePhotoTaken(this, timelapsePhoto);
+                    if (OnTimelapsePhotoTaken != null)
+                    {
+                        Logger.Log("Will call OnTimelapsePhotoTaken");
+                        await OnTimelapsePhotoTaken(this, timelapsePhoto);
+                    }
 
-                await Task.Delay(this.Interval);
+                    await Task.Delay(this.Interval);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error during timelapse capture");
+            }
+            finally
+            {
+                await this.OnFinished?.Invoke(this);
             }
         }
 
@@ -63,18 +70,5 @@ namespace CameraModule.Models
         }
 
         protected abstract Task<TakePhotoResponse> TakeTimelapsePhotoAsync();
-    }
-
-    internal class PiCameraTimelapse : CameraTimelapseBase
-    {
-        private readonly PiCamera camera;
-
-        internal PiCameraTimelapse(TimeSpan interval, TimeSpan duration, CameraConfiguration configuration, PiCamera camera)
-            : base(interval, duration, configuration)
-        {
-            this.camera = camera;
-        }
-
-        protected override Task<TakePhotoResponse> TakeTimelapsePhotoAsync() => this.camera.TakeTimelapsePhotoAsync(this.ID);
     }
 }
